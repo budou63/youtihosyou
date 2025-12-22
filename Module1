@@ -1,0 +1,534 @@
+Option Explicit
+
+'==================== 設定（見出し・データ開始行） ====================
+Private Const HEADER_ROW As Long = 3
+Private Const DATA_START_ROW As Long = 4
+
+'==================== 参照元（工事及び補助金改） ====================
+Private Const SRC_SHEET As String = "表"
+Private Const SRC_FILE_EXACT As String = "工事及び補助金改.xlsm"   ' あればこれを優先
+Private Const SRC_FILE_PATTERN As String = "*工事*補助金改*.xlsm"  ' なければこれで探す
+
+'==================== 参照先（土地調書） ====================
+Private Const DST_SHEET As String = "明細"
+Private Const TRIG_ADDRS As String = "S1,T1,U1"  ' トリガー入力セル（S→T→U）
+
+'======================================================================
+' ① 大字：B11～（B列、必要なら行挿入で延長）
+'======================================================================
+Public Sub 大字縦詰め転記_TUV_B()
+    Transfer_OneHeaderSeries_Vertical _
+        outCol:="B", outStartRow:=11, outBaseEndRow:=20, _
+        headerPrefix:="大字", headerSuffixStyle:="circled", _
+        replaceHyphenMode:="none", _
+        mergeRightCol:=""
+End Sub
+
+'======================================================================
+' ② 字：C11～（C列、必要なら行挿入で延長）
+'======================================================================
+Public Sub 字縦詰め転記_TUV_C()
+    Transfer_OneHeaderSeries_Vertical _
+        outCol:="C", outStartRow:=11, outBaseEndRow:=20, _
+        headerPrefix:="字", headerSuffixStyle:="circled", _
+        replaceHyphenMode:="none", _
+        mergeRightCol:=""
+End Sub
+
+'======================================================================
+' ③ 用地項目：筆①～⑩を同一行に揃えて出す（F/G/I/K/M ）
+'     F:現況地目  G:公募地積  I:実測地積(実測地籍も吸収)  K:単価  M:買収金額
+'======================================================================
+Public Sub 用地項目縦詰め転記_TUV_FGIKM()
+
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
+    Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
+    Dim trigCells As Variant, addr As Variant, key As String
+    Dim outRow As Long, baseEnd As Long
+    Dim suffixes As Variant, i As Long
+    Dim vGenkyo As String, vKobo As String, vJisoku As String, vTanka As String, vKaisyu As String
+    Dim colGenkyo As Long, colKobo As Long, colJisoku As Long, colTanka As Long, colKaisyu As Long
+    Dim h As Long
+
+    prevScreenUpdating = Application.ScreenUpdating
+    prevEnableEvents = Application.EnableEvents
+    prevCalc = Application.Calculation
+
+    On Error GoTo CleanFail
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+
+    ' クリア（基本枠のみ）
+    baseEnd = 20
+    ClearOutputMerged wsDst, "F", 11, baseEnd
+    ClearOutputMerged wsDst, "G", 11, baseEnd
+    ClearOutputMerged wsDst, "I", 11, baseEnd
+    ClearOutputMerged wsDst, "K", 11, baseEnd
+    ClearOutputMerged wsDst, "M", 11, baseEnd
+    outRow = 11
+
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then GoTo CleanExit
+
+    suffixes = Array("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
+
+    trigCells = Split(TRIG_ADDRS, ",")
+    For Each addr In trigCells
+        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        If key <> "" Then
+            foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+            If foundRow > 0 Then
+
+                For i = LBound(suffixes) To UBound(suffixes)
+
+                    colGenkyo = FindHeaderCol(wsSrc, "現況地目" & CStr(suffixes(i)), HEADER_ROW)
+                    colKobo = FindHeaderCol(wsSrc, "公募地積" & CStr(suffixes(i)), HEADER_ROW)
+
+                    colJisoku = FindHeaderCol(wsSrc, "実測地積" & CStr(suffixes(i)), HEADER_ROW)
+                    If colJisoku = 0 Then colJisoku = FindHeaderCol(wsSrc, "実測地籍" & CStr(suffixes(i)), HEADER_ROW)
+
+                    colTanka = FindHeaderCol(wsSrc, "単価" & CStr(suffixes(i)), HEADER_ROW)
+                    colKaisyu = FindHeaderCol(wsSrc, "買収金額" & CStr(suffixes(i)), HEADER_ROW)
+
+                    vGenkyo = IIf(colGenkyo > 0, CleanText(CStr(wsSrc.Cells(foundRow, colGenkyo).Value)), "")
+                    vKobo = IIf(colKobo > 0, CleanText(CStr(wsSrc.Cells(foundRow, colKobo).Value)), "")
+                    vJisoku = IIf(colJisoku > 0, CleanText(CStr(wsSrc.Cells(foundRow, colJisoku).Value)), "")
+                    vTanka = IIf(colTanka > 0, CleanText(CStr(wsSrc.Cells(foundRow, colTanka).Value)), "")
+                    vKaisyu = IIf(colKaisyu > 0, CleanText(CStr(wsSrc.Cells(foundRow, colKaisyu).Value)), "")
+
+                    If (vGenkyo & vKobo & vJisoku & vTanka & vKaisyu) <> "" Then
+
+                        EnsureWritableRowMulti wsDst, outRow, baseEnd, Array("F", "G", "I", "K", "M")
+
+                        If vGenkyo <> "" Then WriteToMergedTopLeft wsDst, "F", outRow, vGenkyo
+                        If vKobo <> "" Then WriteToMergedTopLeft wsDst, "G", outRow, vKobo
+                        If vJisoku <> "" Then WriteToMergedTopLeft wsDst, "I", outRow, vJisoku
+                        If vTanka <> "" Then WriteToMergedTopLeft wsDst, "K", outRow, vTanka
+                        If vKaisyu <> "" Then WriteToMergedTopLeft wsDst, "M", outRow, vKaisyu
+
+                        h = GetMergedHeightMulti(wsDst, outRow, Array("F", "G", "I", "K", "M"))
+                        outRow = outRow + h
+                    End If
+
+                Next i
+            End If
+        End If
+    Next addr
+
+CleanExit:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    Exit Sub
+
+CleanFail:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    MsgBox "転記中にエラー: " & Err.Description, vbExclamation
+End Sub
+
+'======================================================================
+' ④ 元地番：D11～（D:E横結合維持、ハイフン→番地、無ければ末尾に番地）
+'======================================================================
+Public Sub 元地番縦詰め転記_TUV_DE()
+    Transfer_OneHeaderSeries_Vertical _
+        outCol:="D", outStartRow:=11, outBaseEndRow:=20, _
+        headerPrefix:="元地番", headerSuffixStyle:="circled", _
+        replaceHyphenMode:="chiban", _
+        mergeRightCol:="E"
+End Sub
+'======================================================================
+' ★ワンクリック：全部まとめて転記（大字/字/用地項目/元地番）
+'======================================================================
+Public Sub 用地一括転記_ワンクリック()
+
+    Dim prevScreenUpdating As Boolean
+    Dim prevEnableEvents As Boolean
+    Dim prevCalc As XlCalculation
+
+    prevScreenUpdating = Application.ScreenUpdating
+    prevEnableEvents = Application.EnableEvents
+    prevCalc = Application.Calculation
+
+    On Error GoTo CleanFail
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    '--- ここで順番を固定（必要なら並べ替え可） ---
+    Call 大字縦詰め転記_TUV_B
+    Call 字縦詰め転記_TUV_C
+    Call 用地項目縦詰め転記_TUV_FGIKM
+    Call 元地番縦詰め転記_TUV_DE
+
+CleanExit:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    Exit Sub
+
+CleanFail:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    MsgBox "一括転記中にエラー: " & Err.Description, vbExclamation
+End Sub
+
+
+'======================================================================
+' 共通：単一系列（例：大字①～⑩ / 字①～⑩ / 元地番①～⑩）を縦詰め転記
+'======================================================================
+Private Sub Transfer_OneHeaderSeries_Vertical( _
+    ByVal outCol As String, ByVal outStartRow As Long, ByVal outBaseEndRow As Long, _
+    ByVal headerPrefix As String, ByVal headerSuffixStyle As String, _
+    ByVal replaceHyphenMode As String, _
+    ByVal mergeRightCol As String)
+
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
+    Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
+    Dim trigCells As Variant, addr As Variant, key As String
+    Dim outRow As Long
+    Dim suffixes As Variant, i As Long
+    Dim colTarget As Long
+    Dim v As String
+
+    prevScreenUpdating = Application.ScreenUpdating
+    prevEnableEvents = Application.EnableEvents
+    prevCalc = Application.Calculation
+
+    On Error GoTo CleanFail
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+
+    ' クリア（基本枠）
+    ClearOutputMerged wsDst, outCol, outStartRow, outBaseEndRow
+    outRow = outStartRow
+
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then GoTo CleanExit
+
+    If headerSuffixStyle = "circled" Then
+        suffixes = Array("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
+    Else
+        Err.Raise vbObjectError + 901, , "headerSuffixStyle が未対応です。"
+    End If
+
+    trigCells = Split(TRIG_ADDRS, ",")
+    For Each addr In trigCells
+
+        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        If key <> "" Then
+
+            foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+            If foundRow > 0 Then
+
+                For i = LBound(suffixes) To UBound(suffixes)
+
+                    colTarget = FindHeaderCol(wsSrc, headerPrefix & CStr(suffixes(i)), HEADER_ROW)
+                    If colTarget > 0 Then
+
+                        v = CleanText(CStr(wsSrc.Cells(foundRow, colTarget).Value))
+
+                        If replaceHyphenMode = "chiban" Then
+                            v = NormalizeChiban(v)
+                        End If
+
+                        If v <> "" Then
+                            If mergeRightCol <> "" Then
+                                EnsureWritableRow_DE wsDst, outCol, mergeRightCol, outRow, outBaseEndRow
+                            Else
+                                EnsureWritableRow wsDst, outCol, outRow, outBaseEndRow
+                            End If
+
+                            WriteToMergedTopLeft wsDst, outCol, outRow, v
+                            outRow = outRow + GetMergedHeight(wsDst, outCol, outRow)
+                        End If
+                    End If
+
+                Next i
+            End If
+        End If
+    Next addr
+
+CleanExit:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    Exit Sub
+
+CleanFail:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    MsgBox "転記中にエラー: " & Err.Description, vbExclamation
+End Sub
+
+'==================== 地番表記の正規化：〇-□ → 〇番地□ / 無ければ末尾に番地 ====================
+Private Function NormalizeChiban(ByVal s As String) As String
+    Dim t As String
+    t = Trim$(s)
+    If t = "" Then
+        NormalizeChiban = ""
+        Exit Function
+    End If
+
+    If (InStr(t, "-") > 0) Or (InStr(t, "－") > 0) Or (InStr(t, "‐") > 0) Or (InStr(t, "―") > 0) Then
+        t = Replace(t, "－", "番地")
+        t = Replace(t, "-", "番地")
+        t = Replace(t, "‐", "番地")
+        t = Replace(t, "―", "番地")
+    Else
+        If Right$(t, 2) <> "番地" Then t = t & "番地"
+    End If
+
+    NormalizeChiban = Trim$(t)
+End Function
+
+'==================== 参照元ブック取得（同一フォルダから自動検出） ====================
+Private Function GetOrOpenSourceWorkbook(ByVal exactName As String, ByVal pattern As String) As Workbook
+    Dim folderPath As String
+    Dim fullExact As String, fullFound As String
+    Dim fileFound As String
+    Dim wb As Workbook
+
+    folderPath = ThisWorkbook.Path
+    If folderPath = "" Then
+        Err.Raise vbObjectError + 210, , "このブックが未保存のため、同一フォルダを特定できません。先に保存してください。"
+    End If
+
+    For Each wb In Application.Workbooks
+        If LCase$(wb.Name) = LCase$(exactName) Then
+            Set GetOrOpenSourceWorkbook = wb
+            Exit Function
+        End If
+    Next wb
+
+    fullExact = folderPath & "\" & exactName
+    If Dir(fullExact) <> "" Then
+        Set GetOrOpenSourceWorkbook = Application.Workbooks.Open(fileName:=fullExact, ReadOnly:=True)
+        Exit Function
+    End If
+
+    fileFound = Dir(folderPath & "\" & pattern)
+    If fileFound = "" Then
+        Err.Raise vbObjectError + 200, , _
+            "参照元ブックが見つかりません。" & vbCrLf & _
+            "検索フォルダ: " & folderPath & vbCrLf & _
+            "探した名前: " & exactName & vbCrLf & _
+            "探したパターン: " & pattern
+    End If
+
+    For Each wb In Application.Workbooks
+        If LCase$(wb.Name) = LCase$(fileFound) Then
+            Set GetOrOpenSourceWorkbook = wb
+            Exit Function
+        End If
+    Next wb
+
+    fullFound = folderPath & "\" & fileFound
+    Set GetOrOpenSourceWorkbook = Application.Workbooks.Open(fileName:=fullFound, ReadOnly:=True)
+End Function
+
+'==================== 見出し名→列番号 ====================
+Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String, ByVal headerRow As Long) As Long
+    Dim lastCol As Long, c As Long
+    lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
+    For c = 1 To lastCol
+        If CStr(ws.Cells(headerRow, c).Value) = headerName Then
+            FindHeaderCol = c
+            Exit Function
+        End If
+    Next c
+    FindHeaderCol = 0
+End Function
+
+'==================== キー一致行を検索（完全一致） ====================
+Private Function FindRowByKey(ByVal ws As Worksheet, ByVal keyCol As Long, ByVal key As String, ByVal startRow As Long, ByVal lastRow As Long) As Long
+    Dim rng As Range, f As Range
+    Set rng = ws.Range(ws.Cells(startRow, keyCol), ws.Cells(lastRow, keyCol))
+    Set f = rng.Find(What:=key, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
+    If Not f Is Nothing Then FindRowByKey = f.Row Else FindRowByKey = 0
+End Function
+
+'==================== 文字整形 ====================
+Private Function CleanText(ByVal s As String) As String
+    Dim t As String
+    t = s
+    t = Replace(t, vbCrLf, "")
+    t = Replace(t, vbCr, "")
+    t = Replace(t, vbLf, "")
+    t = Replace(t, vbTab, "")
+    t = Trim$(t)
+    If t <> "" Then
+        t = Replace(t, "に伴う用地費", "")
+        t = Trim$(t)
+    End If
+    CleanText = t
+End Function
+
+'==================== 結合対応：出力欄クリア（MergeArea単位） ====================
+Private Sub ClearOutputMerged(ByVal ws As Worksheet, ByVal colLetter As String, ByVal startRow As Long, ByVal endRow As Long)
+    Dim r As Long
+    Dim c As Range, ma As Range
+    Dim colNum As Long
+    colNum = ws.Columns(colLetter).Column
+
+    r = startRow
+    Do While r <= endRow
+        Set c = ws.Cells(r, colNum)
+        If c.MergeCells Then
+            Set ma = c.MergeArea
+            ma.ClearContents
+            r = ma.Row + ma.Rows.Count
+        Else
+            c.ClearContents
+            r = r + 1
+        End If
+    Loop
+End Sub
+
+'==================== 出力先：基本枠超え/結合なら行挿入して回避（単列） ====================
+Private Sub EnsureWritableRow(ByVal ws As Worksheet, ByVal colLetter As String, ByVal rowNum As Long, ByVal baseEndRow As Long)
+    Dim colNum As Long
+    Dim c As Range
+
+    colNum = ws.Columns(colLetter).Column
+    Set c = ws.Cells(rowNum, colNum)
+
+    If rowNum > baseEndRow Then
+        ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
+        Exit Sub
+    End If
+
+    If c.MergeCells Then
+        ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
+    End If
+End Sub
+
+'==================== 出力先：基本枠超え/結合なら行挿入して回避（複数列） ====================
+Private Sub EnsureWritableRowMulti(ByVal ws As Worksheet, ByVal rowNum As Long, ByVal baseEndRow As Long, ByVal colLetters As Variant)
+    Dim i As Long, colNum As Long
+    Dim c As Range
+
+    If rowNum > baseEndRow Then
+        ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
+        Exit Sub
+    End If
+
+    For i = LBound(colLetters) To UBound(colLetters)
+        colNum = ws.Columns(CStr(colLetters(i))).Column
+        Set c = ws.Cells(rowNum, colNum)
+        If c.MergeCells Then
+            ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
+            Exit Sub
+        End If
+    Next i
+End Sub
+
+'==================== 出力先：D:E横結合維持 ====================
+Private Sub EnsureWritableRow_DE(ByVal ws As Worksheet, ByVal leftCol As String, ByVal rightCol As String, ByVal rowNum As Long, ByVal baseEndRow As Long)
+    Dim c As Range
+    Set c = ws.Cells(rowNum, ws.Columns(leftCol).Column)
+
+    If rowNum > baseEndRow Then
+        ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
+        MergeDEIfNeeded ws, leftCol, rightCol, rowNum
+        Exit Sub
+    End If
+
+    If c.MergeCells Then
+        If c.MergeArea.Columns.Count <> 2 Or c.MergeArea.Column <> ws.Columns(leftCol).Column Then
+            ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
+            MergeDEIfNeeded ws, leftCol, rightCol, rowNum
+        End If
+    Else
+        MergeDEIfNeeded ws, leftCol, rightCol, rowNum
+    End If
+End Sub
+
+Private Sub MergeDEIfNeeded(ByVal ws As Worksheet, ByVal leftCol As String, ByVal rightCol As String, ByVal rowNum As Long)
+    Dim rngDE As Range
+    Set rngDE = ws.Range(leftCol & rowNum & ":" & rightCol & rowNum)
+
+    On Error Resume Next
+    If rngDE.MergeCells = False Then
+        rngDE.Merge
+    Else
+        If rngDE.MergeArea.Address <> rngDE.Address Then
+            rngDE.MergeArea.UnMerge
+            rngDE.Merge
+        End If
+    End If
+    On Error GoTo 0
+End Sub
+
+'==================== 結合対応：左上セルに書き込み ====================
+Private Sub WriteToMergedTopLeft(ByVal ws As Worksheet, ByVal colLetter As String, ByVal rowNum As Long, ByVal valueText As String)
+    Dim colNum As Long
+    Dim c As Range, ma As Range
+    colNum = ws.Columns(colLetter).Column
+    Set c = ws.Cells(rowNum, colNum)
+
+    If c.MergeCells Then
+        Set ma = c.MergeArea
+        ma.Cells(1, 1).Value = valueText
+    Else
+        c.Value = valueText
+    End If
+End Sub
+
+'==================== 結合対応：結合の高さ（単列） ====================
+Private Function GetMergedHeight(ByVal ws As Worksheet, ByVal colLetter As String, ByVal rowNum As Long) As Long
+    Dim colNum As Long
+    Dim c As Range
+    colNum = ws.Columns(colLetter).Column
+    Set c = ws.Cells(rowNum, colNum)
+
+    If c.MergeCells Then
+        GetMergedHeight = c.MergeArea.Rows.Count
+    Else
+        GetMergedHeight = 1
+    End If
+End Function
+
+'==================== 結合対応：結合の高さ（複数列の最大） ====================
+Private Function GetMergedHeightMulti(ByVal ws As Worksheet, ByVal rowNum As Long, ByVal colLetters As Variant) As Long
+    Dim i As Long, h As Long, maxH As Long
+    Dim colNum As Long
+    Dim c As Range
+
+    maxH = 1
+    For i = LBound(colLetters) To UBound(colLetters)
+        colNum = ws.Columns(CStr(colLetters(i))).Column
+        Set c = ws.Cells(rowNum, colNum)
+        If c.MergeCells Then h = c.MergeArea.Rows.Count Else h = 1
+        If h > maxH Then maxH = h
+    Next i
+
+    GetMergedHeightMulti = maxH
+End Function
+
+
