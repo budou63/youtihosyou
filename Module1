@@ -331,6 +331,84 @@ CleanFail:
     Exit Sub
 End Sub
 
+'==================== クリア用：最終データ行を取得（指定列群の最大） ====================
+Private Function GetLastDataRow(ByVal ws As Worksheet, ByVal colLetters As Variant, ByVal startRow As Long, ByVal defaultEndRow As Long) As Long
+    Dim i As Long, colNum As Long
+    Dim lastRowCol As Long
+    Dim maxRow As Long
+
+    maxRow = defaultEndRow
+    For i = LBound(colLetters) To UBound(colLetters)
+        colNum = ws.Columns(CStr(colLetters(i))).Column
+        lastRowCol = ws.Cells(ws.Rows.Count, colNum).End(xlUp).Row
+        If lastRowCol >= startRow Then
+            If lastRowCol > maxRow Then maxRow = lastRowCol
+        End If
+    Next i
+
+    GetLastDataRow = maxRow
+End Function
+
+'======================================================================
+' クリア：用地明細（トリガー・単発・縦詰め出力をまとめてクリア）
+'======================================================================
+Public Sub 用地明細_クリア()
+
+    Dim wsDst As Worksheet
+    Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
+    Dim lastRow As Long
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+
+    prevScreenUpdating = Application.ScreenUpdating
+    prevEnableEvents = Application.EnableEvents
+    prevCalc = Application.Calculation
+
+    On Error GoTo CleanFail
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    '--- トリガーセルをクリア ---
+    wsDst.Range("S1").ClearContents
+    wsDst.Range("T1").ClearContents
+    wsDst.Range("U1").ClearContents
+
+    '--- 単発セル（結合考慮）をクリア ---
+    ClearCellContentsMergedSafe wsDst.Range("B5")
+    ClearCellContentsMergedSafe wsDst.Range("F5")
+    ClearCellContentsMergedSafe wsDst.Range("M5")
+
+    '--- 出力部の最終行を算出（行挿入に対応） ---
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M"), 11, 20)
+
+    '--- 縦詰め出力をクリア ---
+    ClearOutputMerged wsDst, "B", 11, lastRow   ' 大字
+    ClearOutputMerged wsDst, "C", 11, lastRow   ' 字
+    ClearOutputMerged wsDst, "D", 11, lastRow   ' 元地番（D:E結合を壊さない）
+    ClearOutputMerged wsDst, "F", 11, lastRow   ' 用地項目：現況地目
+    ClearOutputMerged wsDst, "G", 11, lastRow   ' 用地項目：公募地積
+    ClearOutputMerged wsDst, "I", 11, lastRow   ' 用地項目：実測地積
+    ClearOutputMerged wsDst, "K", 11, lastRow   ' 用地項目：単価
+    ClearOutputMerged wsDst, "M", 11, lastRow   ' 用地項目：買収金額
+
+    '--- 任意：S1 を選択 ---
+    wsDst.Range("S1").Select
+
+CleanExit:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    Exit Sub
+
+CleanFail:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    MsgBox "クリア中にエラーが発生しました: " & Err.Description, vbExclamation
+    Exit Sub
+End Sub
+
 '======================================================================
 ' ④ 元地番：D11～（D:E横結合維持、ハイフン→番地、無ければ末尾に番地）
 '======================================================================
@@ -583,6 +661,16 @@ Private Function CleanText(ByVal s As String) As String
     End If
     CleanText = t
 End Function
+
+'==================== 結合対応：単一セルクリア（MergeArea単位） ====================
+Private Sub ClearCellContentsMergedSafe(ByVal c As Range)
+    If c Is Nothing Then Exit Sub
+    If c.MergeCells Then
+        c.MergeArea.ClearContents
+    Else
+        c.ClearContents
+    End If
+End Sub
 
 '==================== 結合対応：出力欄クリア（MergeArea単位） ====================
 Private Sub ClearOutputMerged(ByVal ws As Worksheet, ByVal colLetter As String, ByVal startRow As Long, ByVal endRow As Long)
