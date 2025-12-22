@@ -98,8 +98,12 @@ Private Sub cmdExport_Click()
     Dim fmt As ExportFormatType
     fmt = GetSelectedFormatType()
 
-    ' 実行（転記→出力）
-    Call modPdfExport.土地調書_出力実行(sh, f, t, chkAll.Value, outDir, txtFileName.Text, fmt)
+    ' 実行（出力のみ）
+    If fmt = ExportFormatPdf Then
+        Call modPdfExport.PDF_出力実行(sh, f, t, chkAll.Value, outDir, txtFileName.Text)
+    Else
+        Call modPdfExport.Excel_出力実行(sh, outDir, txtFileName.Text)
+    End If
 
 
     ' 成功したら保存（次回の初期値用）

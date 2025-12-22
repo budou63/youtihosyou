@@ -163,9 +163,9 @@ EH:
 End Sub
 
 ' 指定シートを Excel 形式（値貼り付け）で保存
-Private Sub Excel_出力実行(ByVal sheetName As String, _
-                        ByVal outDirUi As String, _
-                        ByVal fileNameUi As String)
+Public Sub Excel_出力実行(ByVal sheetName As String, _
+                       ByVal outDirUi As String, _
+                       ByVal fileNameUi As String)
 
     Dim ws As Worksheet
     Set ws = シート取得(sheetName)
