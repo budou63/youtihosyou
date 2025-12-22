@@ -4,6 +4,12 @@ Option Explicit
 ' PDF出力ユーティリティ（ユーザーフォーム起動 & 共通関数）
 '============================================================
 
+'=== 出力形式 ===
+Public Enum ExportFormatType
+    ExportFormatPdf = 1
+    ExportFormatExcelXlsx = 2
+End Enum
+
 '=== 既定の保存先（空ならフォームの入力、空ならブック\PDF） ===
 '   例：固定したければ Environ$("USERPROFILE") & "\Desktop" などに変更
 Private Const DEFAULT_OUT_DIR As String = ""
@@ -100,6 +106,131 @@ Q:
     Application.ScreenUpdating = True
 End Sub
 
+'
+' 土地調書転記 → 指定形式で出力（フォームから呼ばれる）
+'   1) 既存の転記マクロを実行
+'   2) PDF または Excel で保存
+Public Sub 土地調書_出力実行(ByVal sheetName As String, _
+                         ByVal fromPage As Variant, _
+                         ByVal toPage As Variant, _
+                         ByVal allPages As Boolean, _
+                         ByVal outDirUi As String, _
+                         ByVal fileNameUi As String, _
+                         ByVal formatType As ExportFormatType)
+
+    Dim transferNames As Variant
+    Dim i As Long
+    Dim executed As Boolean
+
+    ' 転記マクロ候補（必要ならここに追加する）
+    transferNames = Array( _
+        "用地一括転記_ワンクリック", _
+        "用地一括転記ワンクリック", _
+        "用地一括転記_ワンクリ")
+
+    '--- ① 表シート→土地調書へ転記（候補を順に試す） ---
+    On Error Resume Next
+    For i = LBound(transferNames) To UBound(transferNames)
+        Err.Clear
+        Application.Run CStr(transferNames(i))
+        If Err.Number = 0 Then
+            executed = True
+            Exit For
+        End If
+    Next i
+    On Error GoTo EH
+
+    If Not executed Then
+        MsgBox "転記マクロが見つかりません。" & vbCrLf & _
+               "候補名を確認してください: 用地一括転記_ワンクリック / 用地一括転記ワンクリック / 用地一括転記_ワンクリ", _
+               vbExclamation
+        Exit Sub
+    End If
+
+    '--- ② 出力形式に応じて保存 ---
+    Select Case formatType
+        Case ExportFormatPdf
+            Call PDF_出力実行(sheetName, fromPage, toPage, allPages, outDirUi, fileNameUi)
+        Case ExportFormatExcelXlsx
+            Call Excel_出力実行(sheetName, outDirUi, fileNameUi)
+        Case Else
+            Err.Raise vbObjectError + 310, , "未対応の出力形式が指定されました。"
+    End Select
+
+    Exit Sub
+EH:
+    MsgBox "出力中にエラー: " & Err.Description, vbExclamation
+End Sub
+
+' 指定シートを Excel 形式（値貼り付け）で保存
+Public Sub Excel_出力実行(ByVal sheetName As String, _
+                       ByVal outDirUi As String, _
+                       ByVal fileNameUi As String)
+
+    Dim ws As Worksheet
+    Set ws = シート取得(sheetName)
+    If ws Is Nothing Then
+        MsgBox "シートが見つかりません: " & sheetName, vbExclamation
+        Exit Sub
+    End If
+
+    Dim outDir As String
+    outDir = 解決出力先(outDirUi)
+    If Len(outDir) = 0 Then
+        MsgBox "出力先フォルダが指定されていません。", vbExclamation
+        Exit Sub
+    End If
+    フォルダ作成 outDir
+
+    '=== ファイル名決定 ===
+    Dim baseName As String
+    baseName = Trim$(fileNameUi)
+    If Len(baseName) = 0 Then
+        baseName = 置換不可文字除去(ws.Name & "_" & Format(Now, "yyyymmdd_HHMMSS"))
+    Else
+        baseName = 置換不可文字除去(RemoveExtension(baseName))
+    End If
+
+    Dim fn As String
+    fn = outDir & "\" & baseName & ".xlsx"
+
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+
+    Dim wbNew As Workbook
+    Dim wsNew As Worksheet
+    Dim valueRange As Range
+
+    On Error GoTo EH
+
+    ws.Copy
+    Set wbNew = ActiveWorkbook
+    Set wsNew = wbNew.Worksheets(1)
+
+    Set valueRange = GetValueConversionRange(wsNew)
+    If Not valueRange Is Nothing Then
+        valueRange.Value = valueRange.Value
+    End If
+
+    wbNew.SaveAs Filename:=fn, FileFormat:=xlOpenXMLWorkbook, CreateBackup:=False
+    wbNew.Close SaveChanges:=False
+
+    MsgBox "Excel出力が完了しました。" & vbCrLf & fn, vbInformation
+    GoTo Q
+
+EH:
+    If Not wbNew Is Nothing Then
+        On Error Resume Next
+        wbNew.Close SaveChanges:=False
+        On Error GoTo 0
+    End If
+    MsgBox "Excel出力でエラー: " & Err.Description, vbCritical
+
+Q:
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+End Sub
+
 
 '---------------------- 補助関数 ----------------------------
 
@@ -173,4 +304,30 @@ Private Function 置換不可文字除去(ByVal s As String) As String
     置換不可文字除去 = s
 End Function
 
+' 拡張子を除去（.が無い場合はそのまま）
+Private Function RemoveExtension(ByVal fileName As String) As String
+    Dim p As Long
+    p = InStrRev(fileName, ".")
+    If p > 0 Then
+        RemoveExtension = Left$(fileName, p - 1)
+    Else
+        RemoveExtension = fileName
+    End If
+End Function
 
+' 値貼り付け対象の範囲を取得（印刷範囲があれば優先、なければUsedRange）
+Private Function GetValueConversionRange(ByVal ws As Worksheet) As Range
+    Dim printArea As String
+    printArea = ws.PageSetup.PrintArea
+
+    If Len(printArea) > 0 Then
+        On Error Resume Next
+        Set GetValueConversionRange = ws.Range(printArea)
+        On Error GoTo 0
+        Exit Function
+    End If
+
+    If Not ws.UsedRange Is Nothing Then
+        Set GetValueConversionRange = ws.UsedRange
+    End If
+End Function
