@@ -1,5 +1,9 @@
 Option Explicit
 
+Private mOptFormatPdf As MSForms.OptionButton
+Private mOptFormatExcel As MSForms.OptionButton
+Private mLblFormat As MSForms.Label
+
 Private Sub LabelFileName_Click()
 
 End Sub
@@ -9,6 +13,7 @@ End Sub
 '============================================================
 
 Private Sub UserForm_Initialize()
+    SetupFormatControls
     Call LoadSheets
     chkAll.Value = True
     txtFrom.Enabled = False
@@ -90,8 +95,11 @@ Private Sub cmdExport_Click()
         End If
     End If
 
-' 実行（出力先＋ファイル名を渡す）
-Call modPdfExport.PDF_出力実行(sh, f, t, chkAll.Value, outDir, txtFileName.Text)
+    Dim fmt As ExportFormatType
+    fmt = GetSelectedFormatType()
+
+    ' 実行（転記→出力）
+    Call modPdfExport.土地調書_出力実行(sh, f, t, chkAll.Value, outDir, txtFileName.Text, fmt)
 
 
     ' 成功したら保存（次回の初期値用）
@@ -156,6 +164,7 @@ Private Sub frmPdfExport_Initialize()
     End With
 
     ' --- 以下は既存の初期化処理 ---
+    SetupFormatControls
     Call LoadSheets
     chkAll.Value = True
     txtFrom.Enabled = False
@@ -168,3 +177,55 @@ Private Sub frmPdfExport_Initialize()
     txtOutDir.Text = last
 End Sub
 
+Private Sub SetupFormatControls()
+    On Error Resume Next
+    Set mOptFormatPdf = Me.Controls("optFormatPdf")
+    Set mOptFormatExcel = Me.Controls("optFormatExcel")
+    Set mLblFormat = Me.Controls("lblFormat")
+    On Error GoTo 0
+
+    If mLblFormat Is Nothing Then
+        Set mLblFormat = Me.Controls.Add("Forms.Label.1", "lblFormat", True)
+        With mLblFormat
+            .Caption = "出力形式"
+            .Left = 20
+            .Top = 200
+            .Width = 60
+        End With
+    End If
+
+    If mOptFormatPdf Is Nothing Then
+        Set mOptFormatPdf = Me.Controls.Add("Forms.OptionButton.1", "optFormatPdf", True)
+        With mOptFormatPdf
+            .Caption = "PDF"
+            .Left = mLblFormat.Left + mLblFormat.Width + 10
+            .Top = mLblFormat.Top - 2
+            .Value = True
+        End With
+    End If
+
+    If mOptFormatExcel Is Nothing Then
+        Set mOptFormatExcel = Me.Controls.Add("Forms.OptionButton.1", "optFormatExcel", True)
+        With mOptFormatExcel
+            .Caption = "Excel（xlsx）"
+            .Left = mOptFormatPdf.Left + mOptFormatPdf.Width + 20
+            .Top = mOptFormatPdf.Top
+        End With
+    End If
+
+    ' 同一グループ化（明示的に揃える）
+    mOptFormatPdf.GroupName = "grpExportFormat"
+    mOptFormatExcel.GroupName = "grpExportFormat"
+End Sub
+
+Private Function GetSelectedFormatType() As ExportFormatType
+    If mOptFormatExcel Is Nothing Or mOptFormatPdf Is Nothing Then
+        SetupFormatControls
+    End If
+
+    If mOptFormatExcel.Value Then
+        GetSelectedFormatType = ExportFormatExcelXlsx
+    Else
+        GetSelectedFormatType = ExportFormatPdf
+    End If
+End Function
