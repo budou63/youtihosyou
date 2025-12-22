@@ -140,6 +140,276 @@ CleanFail:
 End Sub
 
 '======================================================================
+' 件名転記：B5 に参照元「表」シートの「件名」を転記
+'======================================================================
+Private Sub 件名転記_B5()
+
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim key As String
+    Dim colTransfer As Long, colKenmei As Long
+    Dim lastSrcRow As Long, foundRow As Long
+    Dim kenmei As String
+    Dim rngB5 As Range
+
+    On Error GoTo CleanFail
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    Set rngB5 = wsDst.Range("B5")
+
+    key = Trim$(CStr(wsDst.Range("S1").Value))
+
+    If key = "" Then
+        If rngB5.MergeCells Then rngB5.MergeArea.ClearContents Else rngB5.ClearContents
+        GoTo CleanExit
+    End If
+
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    colKenmei = FindHeaderCol(wsSrc, "件名", HEADER_ROW)
+    If colKenmei = 0 Then Err.Raise vbObjectError + 110, , "参照元「表」シートに見出し「件名」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then
+        If rngB5.MergeCells Then rngB5.MergeArea.ClearContents Else rngB5.ClearContents
+        GoTo CleanExit
+    End If
+
+    foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+    If foundRow = 0 Then
+        If rngB5.MergeCells Then rngB5.MergeArea.ClearContents Else rngB5.ClearContents
+        GoTo CleanExit
+    End If
+
+    kenmei = CleanText(CStr(wsSrc.Cells(foundRow, colKenmei).Value))
+
+    If kenmei <> "" Then
+        WriteToMergedTopLeft wsDst, "B", 5, kenmei
+    Else
+        If rngB5.MergeCells Then rngB5.MergeArea.ClearContents Else rngB5.ClearContents
+    End If
+
+CleanExit:
+    Exit Sub
+
+CleanFail:
+    If Not rngB5 Is Nothing Then
+        If rngB5.MergeCells Then rngB5.MergeArea.ClearContents Else rngB5.ClearContents
+    End If
+    Exit Sub
+End Sub
+
+'======================================================================
+' 住所転記：F5 に参照元「表」シートの「住所」を転記
+'======================================================================
+Private Sub 住所転記_F5()
+
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim key As String
+    Dim colTransfer As Long, colJusho As Long
+    Dim lastSrcRow As Long, foundRow As Long
+    Dim jusho As String
+    Dim rngF5 As Range
+
+    On Error GoTo CleanFail
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    Set rngF5 = wsDst.Range("F5")
+
+    key = Trim$(CStr(wsDst.Range("S1").Value))
+
+    If key = "" Then
+        If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
+        GoTo CleanExit
+    End If
+
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    colJusho = FindHeaderCol(wsSrc, "住所", HEADER_ROW)
+    If colJusho = 0 Then Err.Raise vbObjectError + 120, , "参照元「表」シートに見出し「住所」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then
+        If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
+        GoTo CleanExit
+    End If
+
+    foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+    If foundRow = 0 Then
+        If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
+        GoTo CleanExit
+    End If
+
+    jusho = CleanText(CStr(wsSrc.Cells(foundRow, colJusho).Value))
+
+    If jusho <> "" Then
+        WriteToMergedTopLeft wsDst, "F", 5, jusho
+    Else
+        If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
+    End If
+
+CleanExit:
+    Exit Sub
+
+CleanFail:
+    If Not rngF5 Is Nothing Then
+        If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
+    End If
+    Exit Sub
+End Sub
+
+'======================================================================
+' 施工業者・債権者転記：M5 に参照元「表」シートの「施工業者・債権者」を転記
+'======================================================================
+Private Sub 施工業者債権者転記_M5()
+
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim key As String
+    Dim colTransfer As Long, colSekou As Long
+    Dim lastSrcRow As Long, foundRow As Long
+    Dim sekou As String
+    Dim rngM5 As Range
+
+    On Error GoTo CleanFail
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    Set rngM5 = wsDst.Range("M5")
+
+    key = Trim$(CStr(wsDst.Range("S1").Value))
+
+    If key = "" Then
+        If rngM5.MergeCells Then rngM5.MergeArea.ClearContents Else rngM5.ClearContents
+        GoTo CleanExit
+    End If
+
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    colSekou = FindHeaderCol(wsSrc, "施工業者・債権者", HEADER_ROW)
+    If colSekou = 0 Then Err.Raise vbObjectError + 130, , "参照元「表」シートに見出し「施工業者・債権者」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then
+        If rngM5.MergeCells Then rngM5.MergeArea.ClearContents Else rngM5.ClearContents
+        GoTo CleanExit
+    End If
+
+    foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+    If foundRow = 0 Then
+        If rngM5.MergeCells Then rngM5.MergeArea.ClearContents Else rngM5.ClearContents
+        GoTo CleanExit
+    End If
+
+    sekou = CleanText(CStr(wsSrc.Cells(foundRow, colSekou).Value))
+
+    If sekou <> "" Then
+        WriteToMergedTopLeft wsDst, "M", 5, sekou
+    Else
+        If rngM5.MergeCells Then rngM5.MergeArea.ClearContents Else rngM5.ClearContents
+    End If
+
+CleanExit:
+    Exit Sub
+
+CleanFail:
+    If Not rngM5 Is Nothing Then
+        If rngM5.MergeCells Then rngM5.MergeArea.ClearContents Else rngM5.ClearContents
+    End If
+    Exit Sub
+End Sub
+
+'==================== クリア用：最終データ行を取得（指定列群の最大） ====================
+Private Function GetLastDataRow(ByVal ws As Worksheet, ByVal colLetters As Variant, ByVal startRow As Long, ByVal defaultEndRow As Long) As Long
+    Dim i As Long, colNum As Long
+    Dim lastRowCol As Long
+    Dim maxRow As Long
+
+    maxRow = defaultEndRow
+    For i = LBound(colLetters) To UBound(colLetters)
+        colNum = ws.Columns(CStr(colLetters(i))).Column
+        lastRowCol = ws.Cells(ws.Rows.Count, colNum).End(xlUp).Row
+        If lastRowCol >= startRow Then
+            If lastRowCol > maxRow Then maxRow = lastRowCol
+        End If
+    Next i
+
+    GetLastDataRow = maxRow
+End Function
+
+'======================================================================
+' クリア：用地明細（トリガー・単発・縦詰め出力をまとめてクリア）
+'======================================================================
+Public Sub 用地明細_クリア()
+
+    Dim wsDst As Worksheet
+    Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
+    Dim lastRow As Long
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+
+    prevScreenUpdating = Application.ScreenUpdating
+    prevEnableEvents = Application.EnableEvents
+    prevCalc = Application.Calculation
+
+    On Error GoTo CleanFail
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    '--- トリガーセルをクリア ---
+    wsDst.Range("S1").ClearContents
+    wsDst.Range("T1").ClearContents
+    wsDst.Range("U1").ClearContents
+
+    '--- 単発セル（結合考慮）をクリア ---
+    ClearCellContentsMergedSafe wsDst.Range("B5")
+    ClearCellContentsMergedSafe wsDst.Range("F5")
+    ClearCellContentsMergedSafe wsDst.Range("M5")
+
+    '--- 出力部の最終行を算出（行挿入に対応） ---
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M"), 11, 20)
+
+    '--- 縦詰め出力をクリア ---
+    ClearOutputMerged wsDst, "B", 11, lastRow   ' 大字
+    ClearOutputMerged wsDst, "C", 11, lastRow   ' 字
+    ClearOutputMerged wsDst, "D", 11, lastRow   ' 元地番（D:E結合を壊さない）
+    ClearOutputMerged wsDst, "F", 11, lastRow   ' 用地項目：現況地目
+    ClearOutputMerged wsDst, "G", 11, lastRow   ' 用地項目：公募地積
+    ClearOutputMerged wsDst, "I", 11, lastRow   ' 用地項目：実測地積
+    ClearOutputMerged wsDst, "K", 11, lastRow   ' 用地項目：単価
+    ClearOutputMerged wsDst, "M", 11, lastRow   ' 用地項目：買収金額
+
+    '--- 任意：S1 を選択 ---
+    wsDst.Range("S1").Select
+
+CleanExit:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    Exit Sub
+
+CleanFail:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    MsgBox "クリア中にエラーが発生しました: " & Err.Description, vbExclamation
+    Exit Sub
+End Sub
+
+'======================================================================
 ' ④ 元地番：D11～（D:E横結合維持、ハイフン→番地、無ければ末尾に番地）
 '======================================================================
 Public Sub 元地番縦詰め転記_TUV_DE()
@@ -168,6 +438,9 @@ Public Sub 用地一括転記_ワンクリック()
     Application.Calculation = xlCalculationManual
 
     '--- ここで順番を固定（必要なら並べ替え可） ---
+    Call 件名転記_B5
+    Call 住所転記_F5
+    Call 施工業者債権者転記_M5
     Call 大字縦詰め転記_TUV_B
     Call 字縦詰め転記_TUV_C
     Call 用地項目縦詰め転記_TUV_FGIKM
@@ -389,6 +662,16 @@ Private Function CleanText(ByVal s As String) As String
     CleanText = t
 End Function
 
+'==================== 結合対応：単一セルクリア（MergeArea単位） ====================
+Private Sub ClearCellContentsMergedSafe(ByVal c As Range)
+    If c Is Nothing Then Exit Sub
+    If c.MergeCells Then
+        c.MergeArea.ClearContents
+    Else
+        c.ClearContents
+    End If
+End Sub
+
 '==================== 結合対応：出力欄クリア（MergeArea単位） ====================
 Private Sub ClearOutputMerged(ByVal ws As Worksheet, ByVal colLetter As String, ByVal startRow As Long, ByVal endRow As Long)
     Dim r As Long
@@ -530,5 +813,3 @@ Private Function GetMergedHeightMulti(ByVal ws As Worksheet, ByVal rowNum As Lon
 
     GetMergedHeightMulti = maxH
 End Function
-
-
