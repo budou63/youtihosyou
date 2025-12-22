@@ -118,10 +118,9 @@ Public Sub 土地調書_出力実行(ByVal sheetName As String, _
                          ByVal fileNameUi As String, _
                          ByVal formatType As ExportFormatType)
 
+    On Error GoTo TransferMissing
+    Call 用地一括転記_ワンクリック
     On Error GoTo EH
-
-    '--- ① 表シート→土地調書へ転記 ---
-    Call Module1.用地一括転記_ワンクリック
 
     '--- ② 出力形式に応じて保存 ---
     Select Case formatType
@@ -136,6 +135,10 @@ Public Sub 土地調書_出力実行(ByVal sheetName As String, _
     Exit Sub
 EH:
     MsgBox "出力中にエラー: " & Err.Description, vbExclamation
+    Exit Sub
+
+TransferMissing:
+    MsgBox "転記マクロ「用地一括転記_ワンクリック」が見つかりません。", vbExclamation
 End Sub
 
 ' 指定シートを Excel 形式（値貼り付け）で保存
