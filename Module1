@@ -10,7 +10,7 @@ Private Const SRC_FILE_EXACT As String = "工事及び補助金改.xlsm"   ' あ
 Private Const SRC_FILE_PATTERN As String = "*工事*補助金改*.xlsm"  ' なければこれで探す
 
 '==================== 参照先（土地調書） ====================
-Private Const DST_SHEET As String = "明細"
+Private Const DST_SHEET As String = "用地明細"
 Private Const TRIG_ADDRS As String = "S1,T1,U1"  ' トリガー入力セル（S→T→U）
 
 '======================================================================
