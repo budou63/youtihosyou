@@ -13,7 +13,23 @@ End Sub
 '============================================================
 
 Private Sub UserForm_Initialize()
+    ' === フォームサイズの固定 ===
+    With Me
+        .StartUpPosition = 1          ' 1 = CenterOwner（中央表示）
+        .Zoom = 100                   ' ズーム倍率を固定（これが変動の原因になる）
+        .Width = 600                  ' 横幅
+        .Height = 350                 ' 高さ
+    End With
+
+    ' 出力形式コントロールの初期化（PDF をデフォルト選択、Excel は非選択）
     SetupFormatControls
+    If Not mOptFormatPdf Is Nothing Then
+        mOptFormatPdf.Value = True
+    End If
+    If Not mOptFormatExcel Is Nothing Then
+        mOptFormatExcel.Value = False
+    End If
+
     Call LoadSheets
     chkAll.Value = True
     txtFrom.Enabled = False
@@ -157,28 +173,6 @@ Private Sub ShowPageInfo()
     Else
         lblInfo.Caption = "推定ページ数を算出できませんでした。"
     End If
-End Sub
-Private Sub frmPdfExport_Initialize()
-    ' === フォームサイズの固定 ===
-    With Me
-        .StartUpPosition = 1          ' 1 = CenterOwner（中央表示）
-        .Zoom = 100                   ' ズーム倍率を固定（これが変動の原因になる）
-        .Width = 600                  ' 横幅
-        .Height = 350                 ' 高さ
-    End With
-
-    ' --- 以下は既存の初期化処理 ---
-    SetupFormatControls
-    Call LoadSheets
-    chkAll.Value = True
-    txtFrom.Enabled = False
-    txtTo.Enabled = False
-    lblInfo.Caption = ""
-
-    Dim last As String
-    last = GetSetting("PdfExport", "Settings", "OutDir", "")
-    If Len(last) = 0 Then last = Environ$("USERPROFILE") & "\Desktop"
-    txtOutDir.Text = last
 End Sub
 
 Private Sub SetupFormatControls()
