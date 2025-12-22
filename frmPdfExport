@@ -1,0 +1,170 @@
+Option Explicit
+
+Private Sub LabelFileName_Click()
+
+End Sub
+
+'============================================================
+' シート＆ページ指定でPDF出力するためのUI
+'============================================================
+
+Private Sub UserForm_Initialize()
+    Call LoadSheets
+    chkAll.Value = True
+    txtFrom.Enabled = False
+    txtTo.Enabled = False
+    lblInfo.Caption = ""
+
+    ' 前回の出力先を復元（なければデスクトップを初期値に）
+    Dim last As String
+    last = GetSetting("PdfExport", "Settings", "OutDir", "")
+    If Len(last) = 0 Then last = Environ$("USERPROFILE") & "\Desktop"
+    txtOutDir.Text = last
+End Sub
+
+Private Sub cmdRefresh_Click()
+    Call LoadSheets
+End Sub
+
+Private Sub cboSheet_Change()
+    Call ShowPageInfo
+End Sub
+
+Private Sub chkAll_Click()
+    Dim en As Boolean
+    en = (chkAll.Value = False)
+    txtFrom.Enabled = en
+    txtTo.Enabled = en
+End Sub
+
+Private Sub cmdBrowse_Click()
+    ' フォルダ選択ダイアログ
+    On Error GoTo EH
+    Dim fd As FileDialog
+    Set fd = Application.FileDialog(msoFileDialogFolderPicker)
+    With fd
+        .Title = "PDFの保存先フォルダを選択"
+        If Len(Trim$(txtOutDir.Text)) > 0 Then
+            .InitialFileName = Trim$(txtOutDir.Text)
+        Else
+            .InitialFileName = Environ$("USERPROFILE") & "\Desktop"
+        End If
+        If .Show = -1 Then
+            txtOutDir.Text = .SelectedItems(1)
+        End If
+    End With
+    Exit Sub
+EH:
+    MsgBox "フォルダ選択でエラーが発生しました。", vbExclamation
+End Sub
+
+Private Sub cmdExport_Click()
+    Dim sh As String
+    sh = Trim$(cboSheet.Value)
+    If Len(sh) = 0 Then
+        MsgBox "シートを選択してください。", vbExclamation
+        Exit Sub
+    End If
+
+    ' 出力先の簡易チェック
+    Dim outDir As String
+    outDir = Trim$(txtOutDir.Text)
+    If Len(outDir) = 0 Then
+        MsgBox "出力先フォルダを指定してください。", vbExclamation
+        Exit Sub
+    End If
+
+    Dim f As Variant, t As Variant
+    If chkAll.Value Then
+        f = Empty: t = Empty
+    Else
+        If Len(Trim$(txtFrom.Text)) = 0 Or Len(Trim$(txtTo.Text)) = 0 Then
+            MsgBox "ページ範囲（開始/終了）を入力してください。", vbExclamation
+            Exit Sub
+        End If
+        f = CLng(Val(txtFrom.Text))
+        t = CLng(Val(txtTo.Text))
+        If f <= 0 Or t < f Then
+            MsgBox "ページ範囲の指定が不正です。", vbExclamation
+            Exit Sub
+        End If
+    End If
+
+' 実行（出力先＋ファイル名を渡す）
+Call modPdfExport.PDF_出力実行(sh, f, t, chkAll.Value, outDir, txtFileName.Text)
+
+
+    ' 成功したら保存（次回の初期値用）
+    SaveSetting "PdfExport", "Settings", "OutDir", outDir
+End Sub
+
+Private Sub cmdCancel_Click()
+    Unload Me
+End Sub
+
+'---------------------- 内部処理 ------------------------------
+
+Private Sub LoadSheets()
+    Dim ws As Worksheet
+    Dim cur As String: cur = Trim$(cboSheet.Value)
+
+    cboSheet.Clear
+    For Each ws In ThisWorkbook.Worksheets
+        ' グラフシート等を除きたい場合は TypeName(ws)="Worksheet" をチェック
+        cboSheet.AddItem ws.Name
+    Next ws
+
+    ' 以前の選択がまだ存在すれば戻す
+    Dim i As Long
+    For i = 0 To cboSheet.ListCount - 1
+        If StrComp(cboSheet.List(i), cur, vbTextCompare) = 0 Then
+            cboSheet.ListIndex = i
+            Exit For
+        End If
+    Next i
+
+    If cboSheet.ListCount > 0 And cboSheet.ListIndex < 0 Then
+        cboSheet.ListIndex = 0
+    End If
+
+    Call ShowPageInfo
+End Sub
+
+Private Sub ShowPageInfo()
+    On Error Resume Next
+    Dim sh As String: sh = Trim$(cboSheet.Value)
+    If Len(sh) = 0 Then
+        lblInfo.Caption = ""
+        Exit Sub
+    End If
+
+    Dim n As Long
+    n = modPdfExport.推定ページ数(sh)
+    If n > 0 Then
+        lblInfo.Caption = "推定ページ数: " & n & "（印刷範囲・倍率・改ページに依存）"
+    Else
+        lblInfo.Caption = "推定ページ数を算出できませんでした。"
+    End If
+End Sub
+Private Sub frmPdfExport_Initialize()
+    ' === フォームサイズの固定 ===
+    With Me
+        .StartUpPosition = 1          ' 1 = CenterOwner（中央表示）
+        .Zoom = 100                   ' ズーム倍率を固定（これが変動の原因になる）
+        .Width = 600                  ' 横幅
+        .Height = 350                 ' 高さ
+    End With
+
+    ' --- 以下は既存の初期化処理 ---
+    Call LoadSheets
+    chkAll.Value = True
+    txtFrom.Enabled = False
+    txtTo.Enabled = False
+    lblInfo.Caption = ""
+
+    Dim last As String
+    last = GetSetting("PdfExport", "Settings", "OutDir", "")
+    If Len(last) = 0 Then last = Environ$("USERPROFILE") & "\Desktop"
+    txtOutDir.Text = last
+End Sub
+
