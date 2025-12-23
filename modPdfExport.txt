@@ -162,6 +162,96 @@ EH:
     MsgBox "出力中にエラー: " & Err.Description, vbExclamation
 End Sub
 
+' 複数シートを1つのExcelファイルにまとめて保存（値貼り付け）
+Public Sub Excel_複数シート_出力実行(ByVal sheetNames() As String, _
+                                   ByVal outDirUi As String, _
+                                   ByVal fileNameUi As String)
+
+    Dim i As Long
+    Dim ws As Worksheet
+    Dim wbNew As Workbook
+    Dim wsNew As Worksheet
+    Dim valueRange As Range
+    Dim outDir As String
+    Dim baseName As String
+    Dim fn As String
+
+    ' シート名の検証
+    For i = LBound(sheetNames) To UBound(sheetNames)
+        Set ws = シート取得(sheetNames(i))
+        If ws Is Nothing Then
+            MsgBox "シートが見つかりません: " & sheetNames(i), vbExclamation
+            Exit Sub
+        End If
+    Next i
+
+    ' 出力先の解決
+    outDir = 解決出力先(outDirUi)
+    If Len(outDir) = 0 Then
+        MsgBox "出力先フォルダが指定されていません。", vbExclamation
+        Exit Sub
+    End If
+    フォルダ作成 outDir
+
+    ' ファイル名決定
+    baseName = Trim$(fileNameUi)
+    If Len(baseName) = 0 Then
+        baseName = 置換不可文字除去("Sheets_" & Format(Now, "yyyymmdd_HHMMSS"))
+    Else
+        baseName = 置換不可文字除去(RemoveExtension(baseName))
+    End If
+
+    fn = outDir & "\" & baseName & ".xlsx"
+
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+
+    On Error GoTo EH
+
+    ' 新規ブックを作成
+    Set wbNew = Workbooks.Add
+    ' デフォルトのSheet1を削除
+    Application.DisplayAlerts = False
+    wbNew.Worksheets(1).Delete
+    Application.DisplayAlerts = True
+
+    ' 各シートをコピーして新規ブックに追加
+    For i = LBound(sheetNames) To UBound(sheetNames)
+        Set ws = シート取得(sheetNames(i))
+        If Not ws Is Nothing Then
+            ws.Copy After:=wbNew.Worksheets(wbNew.Worksheets.Count)
+            Set wsNew = wbNew.Worksheets(wbNew.Worksheets.Count)
+            
+            ' 値貼り付け処理（関数を潰す）
+            Set valueRange = GetValueConversionRange(wsNew)
+            If Not valueRange Is Nothing Then
+                valueRange.Value = valueRange.Value
+            End If
+        End If
+    Next i
+
+    ' 保存
+    wbNew.SaveAs Filename:=fn, FileFormat:=xlOpenXMLWorkbook, CreateBackup:=False
+    wbNew.Close SaveChanges:=False
+
+    MsgBox "Excel出力が完了しました。" & vbCrLf & _
+           "出力シート数: " & (UBound(sheetNames) - LBound(sheetNames) + 1) & "件" & vbCrLf & _
+           fn, vbInformation
+    GoTo Q
+
+EH:
+    If Not wbNew Is Nothing Then
+        On Error Resume Next
+        wbNew.Close SaveChanges:=False
+        On Error GoTo 0
+    End If
+    MsgBox "Excel出力でエラー: " & Err.Description, vbCritical
+
+Q:
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+End Sub
+
 ' 指定シートを Excel 形式（値貼り付け）で保存
 Public Sub Excel_出力実行(ByVal sheetName As String, _
                        ByVal outDirUi As String, _

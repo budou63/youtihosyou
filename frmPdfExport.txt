@@ -23,12 +23,9 @@ Private Sub UserForm_Initialize()
 
     ' 出力形式コントロールの初期化（PDF をデフォルト選択、Excel は非選択）
     SetupFormatControls
-    If Not mOptFormatPdf Is Nothing Then
-        mOptFormatPdf.Value = True
-    End If
-    If Not mOptFormatExcel Is Nothing Then
-        mOptFormatExcel.Value = False
-    End If
+    ' SetupFormatControls でエラーが出た場合は Exit Sub されているため、ここに来れば存在する
+    mOptFormatPdf.Value = True
+    mOptFormatExcel.Value = False
 
     ' ListBox の初期化（複数選択可能）
     Me.Controls("lstSheets").MultiSelect = fmMultiSelectMulti
@@ -146,7 +143,30 @@ Private Sub cmdExport_Click()
         selectedSheets(i) = GetSelectedSheetName(i)
     Next i
 
-    ' 選択された各シートに対して個別に出力
+    ' 【修正】選択シート名の検証
+    For i = 0 To selCount - 1
+        If Len(selectedSheets(i)) = 0 Then
+            MsgBox "シート名の取得に失敗しました（インデックス: " & i & "）。", vbExclamation
+            Exit Sub
+        End If
+    Next i
+
+    ' 【修正】Excel出力かつ複数選択時は1つのファイルにまとめて保存
+    If fmt = ExportFormatExcelXlsx And selCount > 1 Then
+        Dim baseFileNameMulti As String
+        baseFileNameMulti = Trim$(txtFileName.Text)
+        On Error Resume Next
+        Call modPdfExport.Excel_複数シート_出力実行(selectedSheets, outDir, baseFileNameMulti)
+        If Err.Number <> 0 Then
+            MsgBox "Excel出力でエラー: " & Err.Number & vbCrLf & Err.Description, vbCritical
+        End If
+        On Error GoTo 0
+        ' 成功したら保存（次回の初期値用）
+        SaveSetting "PdfExport", "Settings", "OutDir", outDir
+        Exit Sub
+    End If
+
+    ' PDF出力、またはExcel単一選択時：選択された各シートに対して個別に出力
     Dim sh As String
     Dim baseFileName As String
     Dim fileNameForSheet As String
@@ -192,6 +212,7 @@ Private Sub cmdExport_Click()
         If fmt = ExportFormatPdf Then
             Call modPdfExport.PDF_出力実行(sh, f, t, allPages, outDir, fileNameForSheet)
         Else
+            ' Excel単一選択時
             Call modPdfExport.Excel_出力実行(sh, outDir, fileNameForSheet)
         End If
 
@@ -365,39 +386,17 @@ Private Sub UpdatePageRangeUI()
 End Sub
 
 Private Sub SetupFormatControls()
+    ' 【修正】動的生成を廃止し、フォーム上のコントロールを参照するだけにする
     On Error Resume Next
     Set mOptFormatPdf = Me.Controls("optFormatPdf")
     Set mOptFormatExcel = Me.Controls("optFormatExcel")
     Set mLblFormat = Me.Controls("lblFormat")
     On Error GoTo 0
 
-    If mLblFormat Is Nothing Then
-        Set mLblFormat = Me.Controls.Add("Forms.Label.1", "lblFormat", True)
-        With mLblFormat
-            .Caption = "出力形式"
-            .Left = 20
-            .Top = 200
-            .Width = 60
-        End With
-    End If
-
-    If mOptFormatPdf Is Nothing Then
-        Set mOptFormatPdf = Me.Controls.Add("Forms.OptionButton.1", "optFormatPdf", True)
-        With mOptFormatPdf
-            .Caption = "PDF"
-            .Left = mLblFormat.Left + mLblFormat.Width + 10
-            .Top = mLblFormat.Top - 2
-            .Value = True
-        End With
-    End If
-
-    If mOptFormatExcel Is Nothing Then
-        Set mOptFormatExcel = Me.Controls.Add("Forms.OptionButton.1", "optFormatExcel", True)
-        With mOptFormatExcel
-            .Caption = "Excel（xlsx）"
-            .Left = mOptFormatPdf.Left + mOptFormatPdf.Width + 20
-            .Top = mOptFormatPdf.Top
-        End With
+    ' コントロールが見つからない場合はエラー表示して処理中断
+    If mOptFormatPdf Is Nothing Or mOptFormatExcel Is Nothing Or mLblFormat Is Nothing Then
+        MsgBox "フォームに optFormatPdf / optFormatExcel / lblFormat を配置してください。", vbCritical
+        Exit Sub
     End If
 
     ' 同一グループ化（明示的に揃える）
@@ -406,8 +405,15 @@ Private Sub SetupFormatControls()
 End Sub
 
 Private Function GetSelectedFormatType() As ExportFormatType
+    ' 【修正】コントロールが未初期化の場合は初期化を試みる
     If mOptFormatExcel Is Nothing Or mOptFormatPdf Is Nothing Then
         SetupFormatControls
+        ' 初期化後も Nothing の場合はエラー
+        If mOptFormatExcel Is Nothing Or mOptFormatPdf Is Nothing Then
+            MsgBox "出力形式コントロールの初期化に失敗しました。", vbCritical
+            GetSelectedFormatType = ExportFormatPdf  ' デフォルト値
+            Exit Function
+        End If
     End If
 
     If mOptFormatExcel.Value Then
