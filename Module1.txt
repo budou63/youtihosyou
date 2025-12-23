@@ -380,7 +380,8 @@ Public Sub 用地明細_クリア()
     ClearCellContentsMergedSafe wsDst.Range("M5")
 
     '--- 出力部の最終行を算出（行挿入に対応） ---
-    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M"), 11, 20)
+    ' 【追加要件③】S, T, U列も最終行算出に含める
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", "S", "T", "U"), 11, 20)
 
     '--- 縦詰め出力をクリア ---
     ClearOutputMerged wsDst, "B", 11, lastRow   ' 大字
@@ -391,6 +392,10 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "I", 11, lastRow   ' 用地項目：実測地積
     ClearOutputMerged wsDst, "K", 11, lastRow   ' 用地項目：単価
     ClearOutputMerged wsDst, "M", 11, lastRow   ' 用地項目：買収金額
+    ' 【追加要件③】新規項目のクリア処理を追加
+    ClearOutputMerged wsDst, "S", 11, lastRow   ' 契約年月日
+    ClearOutputMerged wsDst, "T", 11, lastRow   ' 申出日
+    ClearOutputMerged wsDst, "U", 11, lastRow   ' 竣工年月日
 
     '--- 任意：S1 を選択 ---
     wsDst.Range("S1").Select
@@ -419,6 +424,39 @@ Public Sub 元地番縦詰め転記_TUV_DE()
         replaceHyphenMode:="chiban", _
         mergeRightCol:="E"
 End Sub
+
+'======================================================================
+' 【追加要件①】⑤ 契約年月日：S11～（S列、接尾辞なし、縦詰め転記）
+' 【修正④】S1 のキーのみを使用
+'======================================================================
+Public Sub 契約年月日縦詰め転記_S()
+    Transfer_SingleHeader_Vertical _
+        outCol:="S", outStartRow:=11, outBaseEndRow:=20, _
+        headerName:="契約年月日", _
+        trigAddr:="S1"
+End Sub
+
+'======================================================================
+' 【追加要件①】⑥ 申出日：T11～（T列、接尾辞なし、縦詰め転記）
+' 【修正④】T1 のキーのみを使用
+'======================================================================
+Public Sub 申出日縦詰め転記_T()
+    Transfer_SingleHeader_Vertical _
+        outCol:="T", outStartRow:=11, outBaseEndRow:=20, _
+        headerName:="申出日", _
+        trigAddr:="T1"
+End Sub
+
+'======================================================================
+' 【追加要件①】⑦ 竣工年月日：U11～（U列、接尾辞なし、縦詰め転記）
+' 【修正④】U1 のキーのみを使用
+'======================================================================
+Public Sub 竣工年月日縦詰め転記_U()
+    Transfer_SingleHeader_Vertical _
+        outCol:="U", outStartRow:=11, outBaseEndRow:=20, _
+        headerName:="竣工年月日", _
+        trigAddr:="U1"
+End Sub
 '======================================================================
 ' ★ワンクリック：全部まとめて転記（大字/字/用地項目/元地番）
 '======================================================================
@@ -445,6 +483,10 @@ Public Sub 用地一括転記_ワンクリック()
     Call 字縦詰め転記_TUV_C
     Call 用地項目縦詰め転記_TUV_FGIKM
     Call 元地番縦詰め転記_TUV_DE
+    ' 【追加要件①】新規項目の転記を追加
+    Call 契約年月日縦詰め転記_S
+    Call 申出日縦詰め転記_T
+    Call 竣工年月日縦詰め転記_U
 
 CleanExit:
     Application.ScreenUpdating = prevScreenUpdating
@@ -545,6 +587,88 @@ Private Sub Transfer_OneHeaderSeries_Vertical( _
             End If
         End If
     Next addr
+
+CleanExit:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    Exit Sub
+
+CleanFail:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    MsgBox "転記中にエラー: " & Err.Description, vbExclamation
+End Sub
+
+'======================================================================
+' 【追加要件①】共通：接尾辞なしの単一見出しを縦詰め転記
+' （例：契約年月日、申出日、竣工年月日など、①～⑩の接尾辞を持たない項目）
+' 【修正②③】trigAddr 引数を追加し、指定された1つのトリガーのみを使用
+'======================================================================
+Private Sub Transfer_SingleHeader_Vertical( _
+    ByVal outCol As String, _
+    ByVal outStartRow As Long, _
+    ByVal outBaseEndRow As Long, _
+    ByVal headerName As String, _
+    ByVal trigAddr As String)
+
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
+    Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
+    Dim key As String
+    Dim outRow As Long
+    Dim colTarget As Long
+    Dim v As String
+
+    prevScreenUpdating = Application.ScreenUpdating
+    prevEnableEvents = Application.EnableEvents
+    prevCalc = Application.Calculation
+
+    On Error GoTo CleanFail
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+
+    ' クリア（基本枠）
+    ClearOutputMerged wsDst, outCol, outStartRow, outBaseEndRow
+    outRow = outStartRow
+
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then GoTo CleanExit
+
+    ' 見出し列を検索（接尾辞なし）
+    colTarget = FindHeaderCol(wsSrc, headerName, HEADER_ROW)
+    If colTarget = 0 Then GoTo CleanExit  ' 見出しが見つからない場合はスキップ（エラーにしない）
+
+    ' 【修正②】指定された1つのトリガーのみを使用（TRIG_ADDRS を Split して回さない）
+    key = Trim$(CStr(wsDst.Range(trigAddr).Value))
+    If key <> "" Then  ' 空白の場合は何も転記しない
+
+        foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+        If foundRow > 0 Then  ' foundRow が見つからない場合もスキップ（エラーにしない）
+
+            v = CleanText(CStr(wsSrc.Cells(foundRow, colTarget).Value))
+
+            If v <> "" Then
+                ' 行挿入対応
+                EnsureWritableRow wsDst, outCol, outRow, outBaseEndRow
+
+                ' 結合セル対応：左上セルに書き込み
+                WriteToMergedTopLeft wsDst, outCol, outRow, v
+                outRow = outRow + GetMergedHeight(wsDst, outCol, outRow)
+            End If
+        End If
+    End If
 
 CleanExit:
     Application.ScreenUpdating = prevScreenUpdating
@@ -694,37 +818,61 @@ Private Sub ClearOutputMerged(ByVal ws As Worksheet, ByVal colLetter As String, 
 End Sub
 
 '==================== 出力先：基本枠超え/結合なら行挿入して回避（単列） ====================
+' 【修正①】結合セルであることだけでは行挿入しない。既に値が入っている場合のみ行挿入する。
 Private Sub EnsureWritableRow(ByVal ws As Worksheet, ByVal colLetter As String, ByVal rowNum As Long, ByVal baseEndRow As Long)
     Dim colNum As Long
     Dim c As Range
+    Dim hasValue As Boolean
 
     colNum = ws.Columns(colLetter).Column
     Set c = ws.Cells(rowNum, colNum)
 
+    ' 基本枠を超えている場合は行挿入
     If rowNum > baseEndRow Then
         ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
         Exit Sub
     End If
 
+    ' 既に値が入っているかチェック（結合セルの場合は左上セルを確認）
     If c.MergeCells Then
+        hasValue = (Trim$(CStr(c.MergeArea.Cells(1, 1).Value)) <> "")
+    Else
+        hasValue = (Trim$(CStr(c.Value)) <> "")
+    End If
+
+    ' 既に値が入っている場合のみ行挿入（結合セルであることだけでは行挿入しない）
+    If hasValue Then
         ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
     End If
 End Sub
 
 '==================== 出力先：基本枠超え/結合なら行挿入して回避（複数列） ====================
+' 【修正①】結合セルであることだけでは行挿入しない。既に値が入っている場合のみ行挿入する。
 Private Sub EnsureWritableRowMulti(ByVal ws As Worksheet, ByVal rowNum As Long, ByVal baseEndRow As Long, ByVal colLetters As Variant)
     Dim i As Long, colNum As Long
     Dim c As Range
+    Dim hasValue As Boolean
 
+    ' 基本枠を超えている場合は行挿入
     If rowNum > baseEndRow Then
         ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
         Exit Sub
     End If
 
+    ' いずれかの列に既に値が入っているかチェック
     For i = LBound(colLetters) To UBound(colLetters)
         colNum = ws.Columns(CStr(colLetters(i))).Column
         Set c = ws.Cells(rowNum, colNum)
+        
+        ' 結合セルの場合は左上セルを確認
         If c.MergeCells Then
+            hasValue = (Trim$(CStr(c.MergeArea.Cells(1, 1).Value)) <> "")
+        Else
+            hasValue = (Trim$(CStr(c.Value)) <> "")
+        End If
+        
+        ' 既に値が入っている場合のみ行挿入（結合セルであることだけでは行挿入しない）
+        If hasValue Then
             ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
             Exit Sub
         End If
@@ -732,22 +880,42 @@ Private Sub EnsureWritableRowMulti(ByVal ws As Worksheet, ByVal rowNum As Long, 
 End Sub
 
 '==================== 出力先：D:E横結合維持 ====================
+' 【修正①】結合セルであることだけでは行挿入しない。既に値が入っている場合のみ行挿入する。
 Private Sub EnsureWritableRow_DE(ByVal ws As Worksheet, ByVal leftCol As String, ByVal rightCol As String, ByVal rowNum As Long, ByVal baseEndRow As Long)
     Dim c As Range
+    Dim hasValue As Boolean
+    
     Set c = ws.Cells(rowNum, ws.Columns(leftCol).Column)
 
+    ' 基本枠を超えている場合は行挿入
     If rowNum > baseEndRow Then
         ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
         MergeDEIfNeeded ws, leftCol, rightCol, rowNum
         Exit Sub
     End If
 
+    ' 既に値が入っているかチェック（結合セルの場合は左上セルを確認）
     If c.MergeCells Then
+        hasValue = (Trim$(CStr(c.MergeArea.Cells(1, 1).Value)) <> "")
+    Else
+        hasValue = (Trim$(CStr(c.Value)) <> "")
+    End If
+
+    ' 既に値が入っている場合、または D:E の横結合ではない結合セルの場合は行挿入
+    If hasValue Then
+        ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
+        MergeDEIfNeeded ws, leftCol, rightCol, rowNum
+    ElseIf c.MergeCells Then
+        ' D:E の横結合ではない結合セルの場合も行挿入（既存仕様維持）
         If c.MergeArea.Columns.Count <> 2 Or c.MergeArea.Column <> ws.Columns(leftCol).Column Then
             ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
             MergeDEIfNeeded ws, leftCol, rightCol, rowNum
+        Else
+            ' D:E の横結合の場合は結合を維持
+            MergeDEIfNeeded ws, leftCol, rightCol, rowNum
         End If
     Else
+        ' 結合セルでない場合は D:E を結合
         MergeDEIfNeeded ws, leftCol, rightCol, rowNum
     End If
 End Sub
