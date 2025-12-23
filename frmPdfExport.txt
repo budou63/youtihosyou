@@ -156,7 +156,7 @@ Private Sub cmdExport_Click()
         Dim baseFileNameMulti As String
         baseFileNameMulti = Trim$(txtFileName.Text)
         On Error Resume Next
-        Call modPdfExport.Excel_複数シート_出力実行(selectedSheets, outDir, baseFileNameMulti)
+        Call modPdfExport.Excel_複数シート出力実行(selectedSheets, outDir, baseFileNameMulti)
         If Err.Number <> 0 Then
             MsgBox "Excel出力でエラー: " & Err.Number & vbCrLf & Err.Description, vbCritical
         End If

@@ -163,7 +163,7 @@ EH:
 End Sub
 
 ' 複数シートを1つのExcelファイルにまとめて保存（値貼り付け）
-Public Sub Excel_複数シート_出力実行(ByVal sheetNames() As String, _
+Public Sub Excel_複数シート出力実行(ByVal sheetNames() As String, _
                                    ByVal outDirUi As String, _
                                    ByVal fileNameUi As String)
 
@@ -180,25 +180,24 @@ Public Sub Excel_複数シート_出力実行(ByVal sheetNames() As String, _
     For i = LBound(sheetNames) To UBound(sheetNames)
         Set ws = シート取得(sheetNames(i))
         If ws Is Nothing Then
-            MsgBox "シートが見つかりません: " & sheetNames(i), vbExclamation
-            Exit Sub
+            Err.Raise vbObjectError + 1001, , "シートが見つかりません: " & sheetNames(i)
         End If
     Next i
 
     ' 出力先の解決
     outDir = 解決出力先(outDirUi)
     If Len(outDir) = 0 Then
-        MsgBox "出力先フォルダが指定されていません。", vbExclamation
-        Exit Sub
+        Err.Raise vbObjectError + 1002, , "出力先フォルダが指定されていません。"
     End If
     フォルダ作成 outDir
 
     ' ファイル名決定
     baseName = Trim$(fileNameUi)
     If Len(baseName) = 0 Then
-        baseName = 置換不可文字除去("Sheets_" & Format(Now, "yyyymmdd_HHMMSS"))
+        baseName = 置換不可文字除去("ExcelExport_" & Format(Now, "yyyymmdd_HHMMSS"))
     Else
         baseName = 置換不可文字除去(RemoveExtension(baseName))
+        baseName = baseName & "_" & Format(Now, "yyyymmdd_HHMMSS")
     End If
 
     fn = outDir & "\" & baseName & ".xlsx"
@@ -240,12 +239,22 @@ Public Sub Excel_複数シート_出力実行(ByVal sheetNames() As String, _
     GoTo Q
 
 EH:
+    Dim errNum As Long
+    Dim errDesc As String
+    errNum = Err.Number
+    errDesc = Err.Description
+    
+    ' クリーンアップ
     If Not wbNew Is Nothing Then
         On Error Resume Next
         wbNew.Close SaveChanges:=False
         On Error GoTo 0
     End If
-    MsgBox "Excel出力でエラー: " & Err.Description, vbCritical
+    
+    ' エラーを呼び出し側に伝播
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    Err.Raise errNum, , errDesc
 
 Q:
     Application.DisplayAlerts = True
