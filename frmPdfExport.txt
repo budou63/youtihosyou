@@ -31,11 +31,7 @@ Private Sub UserForm_Initialize()
     End If
 
     ' ListBox の初期化（複数選択可能）
-    On Error Resume Next
-    If Not Me.Controls("lstSheets") Is Nothing Then
-        Me.Controls("lstSheets").MultiSelect = fmMultiSelectMulti
-    End If
-    On Error GoTo 0
+    Me.Controls("lstSheets").MultiSelect = fmMultiSelectMulti
 
     Call LoadSheets
     ' LoadSheets 内で UpdatePageRangeUI と ShowPageInfo が呼ばれる
@@ -49,11 +45,6 @@ End Sub
 
 Private Sub cmdRefresh_Click()
     Call LoadSheets
-End Sub
-
-Private Sub cboSheet_Change()
-    ' 後方互換性のため残す（lstSheets が存在しない場合用）
-    Call OnSheetSelectionChanged
 End Sub
 
 Private Sub lstSheets_Click()
@@ -259,33 +250,14 @@ End Sub
 Private Sub LoadSheets()
     Dim ws As Worksheet
     Dim lstSheets As MSForms.ListBox
-    On Error Resume Next
+    
     Set lstSheets = Me.Controls("lstSheets")
-    On Error GoTo 0
-
-    If lstSheets Is Nothing Then
-        ' lstSheets が存在しない場合は cboSheet を使用（後方互換性）
-        Dim cur As String: cur = ""
-        On Error Resume Next
-        cur = Trim$(cboSheet.Value)
-        On Error GoTo 0
-
-        cboSheet.Clear
-        For Each ws In ThisWorkbook.Worksheets
-            cboSheet.AddItem ws.Name
-        Next ws
-
-        If cboSheet.ListCount > 0 And cboSheet.ListIndex < 0 Then
-            cboSheet.ListIndex = 0
-        End If
-    Else
-        ' ListBox を使用
-        lstSheets.Clear
-        For Each ws In ThisWorkbook.Worksheets
-            ' グラフシート等を除きたい場合は TypeName(ws)="Worksheet" をチェック
-            lstSheets.AddItem ws.Name
-        Next ws
-    End If
+    
+    lstSheets.Clear
+    For Each ws In ThisWorkbook.Worksheets
+        ' グラフシート等を除きたい場合は TypeName(ws)="Worksheet" をチェック
+        lstSheets.AddItem ws.Name
+    Next ws
 
     Call UpdatePageRangeUI
     Call ShowPageInfo
@@ -328,21 +300,7 @@ Private Function GetSelectedSheetCount() As Long
     Dim i As Long
     Dim count As Long
 
-    On Error Resume Next
     Set lstSheets = Me.Controls("lstSheets")
-    On Error GoTo 0
-
-    If lstSheets Is Nothing Then
-        ' cboSheet を使用（後方互換性）
-        On Error Resume Next
-        If Len(Trim$(cboSheet.Value)) > 0 Then
-            GetSelectedSheetCount = 1
-        Else
-            GetSelectedSheetCount = 0
-        End If
-        On Error GoTo 0
-        Exit Function
-    End If
 
     count = 0
     For i = 0 To lstSheets.ListCount - 1
@@ -360,19 +318,7 @@ Private Function GetSelectedSheetName(ByVal index As Long) As String
     Dim i As Long
     Dim count As Long
 
-    On Error Resume Next
     Set lstSheets = Me.Controls("lstSheets")
-    On Error GoTo 0
-
-    If lstSheets Is Nothing Then
-        ' cboSheet を使用（後方互換性）
-        On Error Resume Next
-        If index = 0 Then
-            GetSelectedSheetName = Trim$(cboSheet.Value)
-        End If
-        On Error GoTo 0
-        Exit Function
-    End If
 
     count = 0
     For i = 0 To lstSheets.ListCount - 1
