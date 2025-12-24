@@ -446,9 +446,9 @@ End Sub
 ' ⑥ 申出日：T11～（T列）
 ' ⑦ 竣工年月日：U11～（U列）
 ' 
-' トリガー：S1, T1, U1（上から順に処理、空欄は無視）
-' 処理方式：毎回全体をクリアしてから、S1→T1→U1の順で縦詰め転記
-' 行管理：outRow変数のみで管理（lastRow依存禁止）
+' トリガー：S1のみ
+' 処理方式：毎回全体をクリアしてから、B～M列の出力行数分、同じ値を繰り返し転記
+' 行管理：B～M列の実際の最終行を取得し、その行数分S～U列に転記
 '======================================================================
 Public Sub 契約年月日縦詰め転記_S()
     Transfer_STU_Vertical_Reconstruct
@@ -464,18 +464,20 @@ End Sub
 
 '======================================================================
 ' 【方式A】S/T/U列を統合して全体再構築方式で転記
+' 【修正】S1のみをトリガーとし、B～M列の出力行数分、同じ値を繰り返し転記
 '======================================================================
 Public Sub Transfer_STU_Vertical_Reconstruct()
     Dim wbSrc As Workbook, wsSrc As Worksheet
     Dim wsDst As Worksheet
     Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
     Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
-    Dim trigCells As Variant, addr As Variant, key As String
-    Dim outRow As Long
+    Dim key As String
+    Dim outRow As Long, currentRow As Long
     Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long
     Dim vKeiyaku As String, vMoushutsu As String, vShunko As String
     Dim h As Long
     Dim outStartRow As Long, outBaseEndRow As Long
+    Dim lastRowBM As Long  ' B～M列の実際の最終行
 
     outStartRow = 11
     outBaseEndRow = 20
@@ -502,7 +504,25 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     ClearOutputMerged wsDst, "T", outStartRow, clearEnd
     ClearOutputMerged wsDst, "U", outStartRow, clearEnd
 
-    '--- ② 参照元シートの準備 ---
+    '--- ② B～M列の実際に出力された最終行を取得 ---
+    ' B/C/D/F/G/I/K/M列の最大値を取得（実際に出力された行数）
+    Dim lastRowB As Long, lastRowC As Long, lastRowD As Long
+    Dim lastRowF As Long, lastRowG As Long, lastRowI As Long
+    Dim lastRowK As Long, lastRowM As Long
+    lastRowB = wsDst.Cells(wsDst.Rows.Count, "B").End(xlUp).Row
+    lastRowC = wsDst.Cells(wsDst.Rows.Count, "C").End(xlUp).Row
+    lastRowD = wsDst.Cells(wsDst.Rows.Count, "D").End(xlUp).Row
+    lastRowF = wsDst.Cells(wsDst.Rows.Count, "F").End(xlUp).Row
+    lastRowG = wsDst.Cells(wsDst.Rows.Count, "G").End(xlUp).Row
+    lastRowI = wsDst.Cells(wsDst.Rows.Count, "I").End(xlUp).Row
+    lastRowK = wsDst.Cells(wsDst.Rows.Count, "K").End(xlUp).Row
+    lastRowM = wsDst.Cells(wsDst.Rows.Count, "M").End(xlUp).Row
+    lastRowBM = WorksheetFunction.Max(outStartRow - 1, lastRowB, lastRowC, lastRowD, lastRowF, lastRowG, lastRowI, lastRowK, lastRowM)
+    
+    ' B～M列にデータが出力されていない場合は処理を終了
+    If lastRowBM < outStartRow Then GoTo CleanExit
+
+    '--- ③ 参照元シートの準備 ---
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
     Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
 
@@ -517,55 +537,52 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     colMoushutsu = FindHeaderCol(wsSrc, "申出日", HEADER_ROW)
     colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
 
-    '--- ③ トリガーセルはS1, T1, U1を配列で順次処理 ---
-    '--- ④ 上から順に（S1 → T1 → U1）各セルに入力された転記コードを読み取る ---
-    trigCells = Split(TRIG_ADDRS, ",")
-    outRow = outStartRow  ' 行位置はoutRow変数のみで管理
+    '--- ④ トリガーセルはS1のみ ---
+    key = Trim$(CStr(wsDst.Range("S1").Value))
+    If key = "" Then GoTo CleanExit  ' S1が空の場合は処理を終了
 
-    For Each addr In trigCells
-        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
-        If key <> "" Then  ' 空欄は無視
-            '--- 参照元「表」シートから該当行を検索 ---
-            foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
-            If foundRow > 0 Then
-                '--- 該当データを取得 ---
-                vKeiyaku = ""
-                vMoushutsu = ""
-                vShunko = ""
+    '--- 参照元「表」シートから該当行を検索 ---
+    foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+    If foundRow = 0 Then GoTo CleanExit  ' 見つからない場合は処理を終了
 
-                If colKeiyaku > 0 Then
-                    vKeiyaku = CleanText(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
-                End If
-                If colMoushutsu > 0 Then
-                    vMoushutsu = CleanText(CStr(wsSrc.Cells(foundRow, colMoushutsu).Value))
-                End If
-                If colShunko > 0 Then
-                    vShunko = CleanText(CStr(wsSrc.Cells(foundRow, colShunko).Value))
-                End If
+    '--- ⑤ 該当データを取得（単一値） ---
+    vKeiyaku = ""
+    vMoushutsu = ""
+    vShunko = ""
 
-                '--- 該当データを縦詰めで出力（S/T/Uを同一行に揃える） ---
-                If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "") Then
-                    ' 行挿入判定（S/T/Uのいずれかに既存値があれば1回だけ行挿入）
-                    EnsureWritableRowMulti wsDst, outRow, outBaseEndRow, Array("S", "T", "U")
+    If colKeiyaku > 0 Then
+        vKeiyaku = CleanText(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
+    End If
+    If colMoushutsu > 0 Then
+        vMoushutsu = CleanText(CStr(wsSrc.Cells(foundRow, colMoushutsu).Value))
+    End If
+    If colShunko > 0 Then
+        vShunko = CleanText(CStr(wsSrc.Cells(foundRow, colShunko).Value))
+    End If
 
-                    ' 同じoutRowにS/T/Uを書き込む
-                    If vKeiyaku <> "" Then
-                        WriteToMergedTopLeft wsDst, "S", outRow, vKeiyaku
-                    End If
-                    If vMoushutsu <> "" Then
-                        WriteToMergedTopLeft wsDst, "T", outRow, vMoushutsu
-                    End If
-                    If vShunko <> "" Then
-                        WriteToMergedTopLeft wsDst, "U", outRow, vShunko
-                    End If
+    '--- ⑥ B～M列の出力行数分、S～U列に同じ値を繰り返し転記 ---
+    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "") Then
+        currentRow = outStartRow
+        Do While currentRow <= lastRowBM
+            ' 行挿入判定（S/T/Uのいずれかに既存値があれば1回だけ行挿入）
+            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U")
 
-                    '--- ⑤ 結合セルがある前提で、GetMergeHeight/MaxHeight方式でoutRowを進める ---
-                    h = GetMergedHeightMulti(wsDst, outRow, Array("S", "T", "U"))
-                    outRow = outRow + h
-                End If
+            ' 同じcurrentRowにS/T/Uを書き込む
+            If vKeiyaku <> "" Then
+                WriteToMergedTopLeft wsDst, "S", currentRow, vKeiyaku
             End If
-        End If
-    Next addr
+            If vMoushutsu <> "" Then
+                WriteToMergedTopLeft wsDst, "T", currentRow, vMoushutsu
+            End If
+            If vShunko <> "" Then
+                WriteToMergedTopLeft wsDst, "U", currentRow, vShunko
+            End If
+
+            ' 結合セルがある前提で、GetMergeHeight/MaxHeight方式でcurrentRowを進める
+            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U"))
+            currentRow = currentRow + h
+        Loop
+    End If
 
 CleanExit:
     Application.ScreenUpdating = prevScreenUpdating
