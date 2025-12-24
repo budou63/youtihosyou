@@ -63,13 +63,25 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    ' クリア（基本枠のみ）
+    ' 【修正①】クリア：実際の最終行までクリア（残骸防止）
     baseEnd = 20
-    ClearOutputMerged wsDst, "F", 11, baseEnd
-    ClearOutputMerged wsDst, "G", 11, baseEnd
-    ClearOutputMerged wsDst, "I", 11, baseEnd
-    ClearOutputMerged wsDst, "K", 11, baseEnd
-    ClearOutputMerged wsDst, "M", 11, baseEnd
+    Dim lastRowF As Long, lastRowG As Long, lastRowI As Long, lastRowK As Long, lastRowM As Long
+    Dim clearEndF As Long, clearEndG As Long, clearEndI As Long, clearEndK As Long, clearEndM As Long
+    lastRowF = wsDst.Cells(wsDst.Rows.Count, "F").End(xlUp).Row
+    lastRowG = wsDst.Cells(wsDst.Rows.Count, "G").End(xlUp).Row
+    lastRowI = wsDst.Cells(wsDst.Rows.Count, "I").End(xlUp).Row
+    lastRowK = wsDst.Cells(wsDst.Rows.Count, "K").End(xlUp).Row
+    lastRowM = wsDst.Cells(wsDst.Rows.Count, "M").End(xlUp).Row
+    clearEndF = WorksheetFunction.Max(baseEnd, lastRowF)
+    clearEndG = WorksheetFunction.Max(baseEnd, lastRowG)
+    clearEndI = WorksheetFunction.Max(baseEnd, lastRowI)
+    clearEndK = WorksheetFunction.Max(baseEnd, lastRowK)
+    clearEndM = WorksheetFunction.Max(baseEnd, lastRowM)
+    ClearOutputMerged wsDst, "F", 11, clearEndF
+    ClearOutputMerged wsDst, "G", 11, clearEndG
+    ClearOutputMerged wsDst, "I", 11, clearEndI
+    ClearOutputMerged wsDst, "K", 11, clearEndK
+    ClearOutputMerged wsDst, "M", 11, clearEndM
     outRow = 11
 
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -157,7 +169,8 @@ Private Sub 件名転記_B5()
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
     Set rngB5 = wsDst.Range("B5")
 
-    key = Trim$(CStr(wsDst.Range("S1").Value))
+    ' 【修正②】S1 → T1 → U1 の順で最初に値が入っているトリガーセルのキーを取得
+    key = GetFirstTriggerKey(wsDst)
 
     If key = "" Then
         If rngB5.MergeCells Then rngB5.MergeArea.ClearContents Else rngB5.ClearContents
@@ -221,7 +234,8 @@ Private Sub 住所転記_F5()
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
     Set rngF5 = wsDst.Range("F5")
 
-    key = Trim$(CStr(wsDst.Range("S1").Value))
+    ' 【修正②】S1 → T1 → U1 の順で最初に値が入っているトリガーセルのキーを取得
+    key = GetFirstTriggerKey(wsDst)
 
     If key = "" Then
         If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
@@ -285,7 +299,8 @@ Private Sub 施工業者債権者転記_M5()
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
     Set rngM5 = wsDst.Range("M5")
 
-    key = Trim$(CStr(wsDst.Range("S1").Value))
+    ' 【修正②】S1 → T1 → U1 の順で最初に値が入っているトリガーセルのキーを取得
+    key = GetFirstTriggerKey(wsDst)
 
     If key = "" Then
         If rngM5.MergeCells Then rngM5.MergeArea.ClearContents Else rngM5.ClearContents
@@ -426,36 +441,143 @@ Public Sub 元地番縦詰め転記_TUV_DE()
 End Sub
 
 '======================================================================
-' 【追加要件①】⑤ 契約年月日：S11～（S列、接尾辞なし、縦詰め転記）
-' 【修正】S1 のキーのみを使用（T1 / U1 は今後一切使わない）
+' 【方式A：毎回 全体再構築 方式】
+' ⑤ 契約年月日：S11～（S列）
+' ⑥ 申出日：T11～（T列）
+' ⑦ 竣工年月日：U11～（U列）
+' 
+' トリガー：S1, T1, U1（上から順に処理、空欄は無視）
+' 処理方式：毎回全体をクリアしてから、S1→T1→U1の順で縦詰め転記
+' 行管理：outRow変数のみで管理（lastRow依存禁止）
 '======================================================================
 Public Sub 契約年月日縦詰め転記_S()
-    Transfer_SingleHeader_Vertical _
-        outCol:="S", outStartRow:=11, outBaseEndRow:=20, _
-        headerName:="契約年月日", _
-        trigAddr:="S1"
+    Transfer_STU_Vertical_Reconstruct
 End Sub
 
-'======================================================================
-' 【追加要件①】⑥ 申出日：T11～（T列、接尾辞なし、縦詰め転記）
-' 【修正】S1 のキーのみを使用（T1 / U1 は今後一切使わない）
-'======================================================================
 Public Sub 申出日縦詰め転記_T()
-    Transfer_SingleHeader_Vertical _
-        outCol:="T", outStartRow:=11, outBaseEndRow:=20, _
-        headerName:="申出日", _
-        trigAddr:="S1"
+    Transfer_STU_Vertical_Reconstruct
+End Sub
+
+Public Sub 竣工年月日縦詰め転記_U()
+    Transfer_STU_Vertical_Reconstruct
 End Sub
 
 '======================================================================
-' 【追加要件①】⑦ 竣工年月日：U11～（U列、接尾辞なし、縦詰め転記）
-' 【修正】S1 のキーのみを使用（T1 / U1 は今後一切使わない）
+' 【方式A】S/T/U列を統合して全体再構築方式で転記
 '======================================================================
-Public Sub 竣工年月日縦詰め転記_U()
-    Transfer_SingleHeader_Vertical _
-        outCol:="U", outStartRow:=11, outBaseEndRow:=20, _
-        headerName:="竣工年月日", _
-        trigAddr:="S1"
+Public Sub Transfer_STU_Vertical_Reconstruct()
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
+    Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
+    Dim trigCells As Variant, addr As Variant, key As String
+    Dim outRow As Long
+    Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long
+    Dim vKeiyaku As String, vMoushutsu As String, vShunko As String
+    Dim h As Long
+    Dim outStartRow As Long, outBaseEndRow As Long
+
+    outStartRow = 11
+    outBaseEndRow = 20
+
+    prevScreenUpdating = Application.ScreenUpdating
+    prevEnableEvents = Application.EnableEvents
+    prevCalc = Application.Calculation
+
+    On Error GoTo CleanFail
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+
+    '--- ① 出力エリア（S11～Uの転記範囲）を毎回すべてクリア ---
+    ' 結合セル対応で、左上セル基準で確実に消すこと
+    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, clearEnd As Long
+    lastRowS = wsDst.Cells(wsDst.Rows.Count, "S").End(xlUp).Row
+    lastRowT = wsDst.Cells(wsDst.Rows.Count, "T").End(xlUp).Row
+    lastRowU = wsDst.Cells(wsDst.Rows.Count, "U").End(xlUp).Row
+    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU)
+    ClearOutputMerged wsDst, "S", outStartRow, clearEnd
+    ClearOutputMerged wsDst, "T", outStartRow, clearEnd
+    ClearOutputMerged wsDst, "U", outStartRow, clearEnd
+
+    '--- ② 参照元シートの準備 ---
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then GoTo CleanExit
+
+    '--- 見出し列を検索（接尾辞なし） ---
+    colKeiyaku = FindHeaderCol(wsSrc, "契約年月日", HEADER_ROW)
+    colMoushutsu = FindHeaderCol(wsSrc, "申出日", HEADER_ROW)
+    colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
+
+    '--- ③ トリガーセルはS1, T1, U1を配列で順次処理 ---
+    '--- ④ 上から順に（S1 → T1 → U1）各セルに入力された転記コードを読み取る ---
+    trigCells = Split(TRIG_ADDRS, ",")
+    outRow = outStartRow  ' 行位置はoutRow変数のみで管理
+
+    For Each addr In trigCells
+        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        If key <> "" Then  ' 空欄は無視
+            '--- 参照元「表」シートから該当行を検索 ---
+            foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+            If foundRow > 0 Then
+                '--- 該当データを取得 ---
+                vKeiyaku = ""
+                vMoushutsu = ""
+                vShunko = ""
+
+                If colKeiyaku > 0 Then
+                    vKeiyaku = CleanText(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
+                End If
+                If colMoushutsu > 0 Then
+                    vMoushutsu = CleanText(CStr(wsSrc.Cells(foundRow, colMoushutsu).Value))
+                End If
+                If colShunko > 0 Then
+                    vShunko = CleanText(CStr(wsSrc.Cells(foundRow, colShunko).Value))
+                End If
+
+                '--- 該当データを縦詰めで出力（S/T/Uを同一行に揃える） ---
+                If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "") Then
+                    ' 行挿入判定（S/T/Uのいずれかに既存値があれば1回だけ行挿入）
+                    EnsureWritableRowMulti wsDst, outRow, outBaseEndRow, Array("S", "T", "U")
+
+                    ' 同じoutRowにS/T/Uを書き込む
+                    If vKeiyaku <> "" Then
+                        WriteToMergedTopLeft wsDst, "S", outRow, vKeiyaku
+                    End If
+                    If vMoushutsu <> "" Then
+                        WriteToMergedTopLeft wsDst, "T", outRow, vMoushutsu
+                    End If
+                    If vShunko <> "" Then
+                        WriteToMergedTopLeft wsDst, "U", outRow, vShunko
+                    End If
+
+                    '--- ⑤ 結合セルがある前提で、GetMergeHeight/MaxHeight方式でoutRowを進める ---
+                    h = GetMergedHeightMulti(wsDst, outRow, Array("S", "T", "U"))
+                    outRow = outRow + h
+                End If
+            End If
+        End If
+    Next addr
+
+CleanExit:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    Exit Sub
+
+CleanFail:
+    Application.ScreenUpdating = prevScreenUpdating
+    Application.EnableEvents = prevEnableEvents
+    Application.Calculation = prevCalc
+    MsgBox "転記中にエラー: " & Err.Description, vbExclamation
 End Sub
 '======================================================================
 ' ★ワンクリック：全部まとめて転記（大字/字/用地項目/元地番）
@@ -483,10 +605,8 @@ Public Sub 用地一括転記_ワンクリック()
     Call 字縦詰め転記_TUV_C
     Call 用地項目縦詰め転記_TUV_FGIKM
     Call 元地番縦詰め転記_TUV_DE
-    ' 【追加要件①】新規項目の転記を追加
-    Call 契約年月日縦詰め転記_S
-    Call 申出日縦詰め転記_T
-    Call 竣工年月日縦詰め転記_U
+    ' 【方式A】S/T/U列は統合処理で1回だけ実行
+    Call Transfer_STU_Vertical_Reconstruct
 
 CleanExit:
     Application.ScreenUpdating = prevScreenUpdating
@@ -532,8 +652,11 @@ Private Sub Transfer_OneHeaderSeries_Vertical( _
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    ' クリア（基本枠）
-    ClearOutputMerged wsDst, outCol, outStartRow, outBaseEndRow
+    ' 【修正①】クリア：実際の最終行までクリア（残骸防止）
+    Dim lastRowCol As Long, clearEnd As Long
+    lastRowCol = wsDst.Cells(wsDst.Rows.Count, wsDst.Columns(outCol).Column).End(xlUp).Row
+    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowCol)
+    ClearOutputMerged wsDst, outCol, outStartRow, clearEnd
     outRow = outStartRow
 
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -633,8 +756,11 @@ Private Sub Transfer_SingleHeader_Vertical( _
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    ' クリア（基本枠）
-    ClearOutputMerged wsDst, outCol, outStartRow, outBaseEndRow
+    ' 【修正①】クリア：実際の最終行までクリア（残骸防止）
+    Dim lastRowCol As Long, clearEnd As Long
+    lastRowCol = wsDst.Cells(wsDst.Rows.Count, wsDst.Columns(outCol).Column).End(xlUp).Row
+    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowCol)
+    ClearOutputMerged wsDst, outCol, outStartRow, clearEnd
     outRow = outStartRow
 
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -683,7 +809,25 @@ CleanFail:
     MsgBox "転記中にエラー: " & Err.Description, vbExclamation
 End Sub
 
-'==================== 地番表記の正規化：〇-□ → 〇番地□ / 無ければ末尾に番地 ====================
+'==================== 【修正②】トリガーセルから最初の有効なキーを取得 ====================
+' S1 → T1 → U1 の順で、最初に値が入っているトリガーセルの転記コードを取得
+Private Function GetFirstTriggerKey(ByVal wsDst As Worksheet) As String
+    Dim trigCells As Variant, addr As Variant
+    Dim key As String
+    
+    trigCells = Split(TRIG_ADDRS, ",")
+    For Each addr In trigCells
+        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        If key <> "" Then
+            GetFirstTriggerKey = key
+            Exit Function
+        End If
+    Next addr
+    
+    GetFirstTriggerKey = ""
+End Function
+
+'==================== 【修正④】地番表記の正規化：〇-□ → 〇番□ / 無ければ末尾に番 ====================
 Private Function NormalizeChiban(ByVal s As String) As String
     Dim t As String
     t = Trim$(s)
@@ -692,13 +836,15 @@ Private Function NormalizeChiban(ByVal s As String) As String
         Exit Function
     End If
 
+    ' ハイフン（-、－、‐、―）はすべて「番」に置換
     If (InStr(t, "-") > 0) Or (InStr(t, "－") > 0) Or (InStr(t, "‐") > 0) Or (InStr(t, "―") > 0) Then
-        t = Replace(t, "－", "番地")
-        t = Replace(t, "-", "番地")
-        t = Replace(t, "‐", "番地")
-        t = Replace(t, "―", "番地")
+        t = Replace(t, "－", "番")
+        t = Replace(t, "-", "番")
+        t = Replace(t, "‐", "番")
+        t = Replace(t, "―", "番")
     Else
-        If Right$(t, 2) <> "番地" Then t = t & "番地"
+        ' ハイフンが存在しない場合は、末尾に「番」を付与
+        If Right$(t, 1) <> "番" Then t = t & "番"
     End If
 
     NormalizeChiban = Trim$(t)
