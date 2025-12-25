@@ -241,6 +241,45 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
         outRowDate = outRowDate + dateMaxHeight
     End If
 
+    '========================
+    ' 3) 縦詰め転記：5,000万控除対象（①～⑥）
+    ' O列単独で縦詰め転記する
+    '========================
+    Dim currentRowO As Long
+    currentRowO = OUT_START_ROW
+
+    For i = 1 To 6
+        ' 見出し名を構築（例：「5,000万控除対象①」）
+        Dim headerName As String
+        headerName = "5,000万控除対象" & CircleNum(i)
+        
+        ' 見出し列を検索
+        Dim colKoujo As Long
+        colKoujo = FindHeaderCol(wsSrc, headerName, HEADER_ROW)
+        
+        ' 見出しが見つかった場合のみ値を取得
+        Dim vKoujo As String
+        vKoujo = ""
+        If colKoujo > 0 Then
+            vKoujo = Trim$(CStr(wsSrc.Cells(foundRow, colKoujo).Value))
+        End If
+        
+        ' 空白でないものだけを転記
+        If vKoujo <> "" Then
+            '【修正】セット単位で行挿入判定（O列に既存値があれば1回だけ行挿入）
+            InsertRowIfAnyValue wsDst, currentRowO, OUT_BASE_END_ROW, Array("O")
+            
+            ' O列に書き込む
+            WriteMergedTopLeft wsDst.Cells(currentRowO, "O"), vKoujo
+            hitAny = True
+            
+            ' この行のO列の最大高さを取得して、次のrowBaseに進む
+            Dim maxHeightO As Long
+            maxHeightO = GetMaxHeightForRow(wsDst, currentRowO, Array("O"))
+            currentRowO = currentRowO + maxHeightO
+        End If
+    Next i
+
     If Not hitAny Then
         MsgBox "転記対象が見つからなかったため、値は出力されませんでした。" & vbCrLf & vbCrLf & msg, vbExclamation
     End If
@@ -465,6 +504,7 @@ End Sub
 Private Sub ClearVerticalArea(ByVal ws As Worksheet)
     Dim lastRowB As Long, lastRowI As Long, lastRowF As Long
     Dim lastRowP As Long, lastRowQ As Long, lastRowR As Long
+    Dim lastRowO As Long
     Dim clearEnd As Long
 
     lastRowB = ws.Cells(ws.Rows.Count, "B").End(xlUp).Row
@@ -473,8 +513,9 @@ Private Sub ClearVerticalArea(ByVal ws As Worksheet)
     lastRowP = ws.Cells(ws.Rows.Count, "P").End(xlUp).Row
     lastRowQ = ws.Cells(ws.Rows.Count, "Q").End(xlUp).Row
     lastRowR = ws.Cells(ws.Rows.Count, "R").End(xlUp).Row
+    lastRowO = ws.Cells(ws.Rows.Count, "O").End(xlUp).Row
 
-    clearEnd = WorksheetFunction.Max(OUT_BASE_END_ROW, lastRowB, lastRowI, lastRowF, lastRowP, lastRowQ, lastRowR)
+    clearEnd = WorksheetFunction.Max(OUT_BASE_END_ROW, lastRowB, lastRowI, lastRowF, lastRowP, lastRowQ, lastRowR, lastRowO)
 
     ClearMergedRange ws, "B", OUT_START_ROW, clearEnd
     ClearMergedRange ws, "I", OUT_START_ROW, clearEnd
@@ -482,6 +523,7 @@ Private Sub ClearVerticalArea(ByVal ws As Worksheet)
     ClearMergedRange ws, "P", OUT_START_ROW, clearEnd
     ClearMergedRange ws, "Q", OUT_START_ROW, clearEnd
     ClearMergedRange ws, "R", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "O", OUT_START_ROW, clearEnd
 End Sub
 
 
