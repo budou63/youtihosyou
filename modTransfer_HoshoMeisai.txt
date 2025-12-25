@@ -119,7 +119,13 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
     '【修正】セット単位で行挿入判定を行い、1回だけ行挿入する
     '========================
     Dim currentRowBase As Long
+    Dim bifStartRow As Long
+    Dim bifEndRow As Long
+    Dim bifStarted As Boolean  '【追加】B/I/Fの最初の出力行を記録するためのフラグ
     currentRowBase = OUT_START_ROW
+    bifStartRow = OUT_START_ROW
+    bifEndRow = OUT_START_ROW - 1  ' 初期値は開始行より1行前（データなしを意味）
+    bifStarted = False  '【追加】初期化
 
     For i = 1 To 6
 
@@ -156,6 +162,12 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
             '【修正】セット単位で行挿入判定（B/I/Fのいずれかに既存値があれば1回だけ行挿入）
             InsertRowIfAnyValue wsDst, currentRowBase, OUT_BASE_END_ROW, Array("B", "I", "F")
 
+            '【修正】最初にB/I/Fを書き込んだ行を正確に記録
+            If Not bifStarted Then
+                bifStartRow = currentRowBase
+                bifStarted = True
+            End If
+
             ' 同じcurrentRowBaseにB/I/Fを書き込む
             If vType <> "" Then
                 WriteMergedTopLeft wsDst.Cells(currentRowBase, "B"), vType
@@ -175,18 +187,17 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
             ' この行のB/I/Fの最大高さを取得して、次のrowBaseに進む
             Dim maxHeight As Long
             maxHeight = GetMaxHeightForRow(wsDst, currentRowBase, Array("B", "I", "F"))
+            ' B/I/Fの出力範囲を更新（最終行を記録）
+            bifEndRow = currentRowBase + maxHeight - 1
             currentRowBase = currentRowBase + maxHeight
         End If
 
     Next i
 
     '========================
-    ' 2) 単一項目の縦詰め転記：契約年月日 / 申出日 / 竣工年月日
-    '【修正】P/Q/Rを同一行に揃え、セット単位で1回だけ行挿入する
+    ' 2) 契約年月日 / 申出日 / 竣工年月日（P/Q/R列）
+    '【修正】B/I/Fの出力行数に追従して、同じ値を繰り返し書き込む
     '========================
-    Dim outRowDate As Long
-    outRowDate = OUT_START_ROW
-
     '--- 契約年月日（P列） ---
     Dim colKeiyaku As Long
     colKeiyaku = FindHeaderCol(wsSrc, "契約年月日", HEADER_ROW)
@@ -214,31 +225,29 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
         vShunko = Trim$(CStr(wsSrc.Cells(foundRow, colShunko).Value))
     End If
 
-    ' P/Q/Rのいずれかが存在する場合は、同一行に書き込む
-    If vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Then
-        '【修正】セット単位で行挿入判定（P/Q/Rのいずれかに既存値があれば1回だけ行挿入）
-        InsertRowIfAnyValue wsDst, outRowDate, OUT_BASE_END_ROW, Array("P", "Q", "R")
+    ' B/I/Fが出力された場合、その範囲のすべての行にP/Q/Rを書き込む
+    If bifEndRow >= bifStartRow And (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "") Then
+        '【修正】B/I/Fの出力範囲を1行ずつループ（結合高さに依存しない方式）
+        ' 結合セルがある場合でも、同じMergeArea左上に複数回書いても結果は同じで安全
+        Dim r As Long
+        For r = bifStartRow To bifEndRow
+            ' 行挿入判定は行わない（B/I/F側で既に行挿入済み）
+            ' 結合セル対応で左上セルに書き込む
+            If vKeiyaku <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "P"), vKeiyaku
+                hitAny = True
+            End If
 
-        ' 同じoutRowDateにP/Q/Rを書き込む
-        If vKeiyaku <> "" Then
-            WriteMergedTopLeft wsDst.Cells(outRowDate, "P"), vKeiyaku
-            hitAny = True
-        End If
+            If vMoushutsu <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "Q"), vMoushutsu
+                hitAny = True
+            End If
 
-        If vMoushutsu <> "" Then
-            WriteMergedTopLeft wsDst.Cells(outRowDate, "Q"), vMoushutsu
-            hitAny = True
-        End If
-
-        If vShunko <> "" Then
-            WriteMergedTopLeft wsDst.Cells(outRowDate, "R"), vShunko
-            hitAny = True
-        End If
-
-        ' MaxHeight方式で次行に進む
-        Dim dateMaxHeight As Long
-        dateMaxHeight = GetMaxHeightForRow(wsDst, outRowDate, Array("P", "Q", "R"))
-        outRowDate = outRowDate + dateMaxHeight
+            If vShunko <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "R"), vShunko
+                hitAny = True
+            End If
+        Next r
     End If
 
     '========================
