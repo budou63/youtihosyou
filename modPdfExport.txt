@@ -459,6 +459,7 @@ End Function
 
 ' 出力先の解決（フォーム値 > 定数 > 既定：ブック\PDF）
 ' [ADD] targetWb: 出力対象ブック（Nothingの場合はActiveWorkbookを使用）
+' [FIX] アドイン化対応：targetWbがNothingの場合はActiveWorkbookを使用（フォールバック）
 Private Function 解決出力先(ByVal uiPath As String, Optional ByVal targetWb As Workbook = Nothing) As String
     Dim p As String
     p = Trim$(uiPath)
@@ -473,15 +474,17 @@ Private Function 解決出力先(ByVal uiPath As String, Optional ByVal targetWb
         ' [FIX] targetWbのパスを使用（アドイン自身ではなく、出力対象のブック）
         Dim wb As Workbook
         If targetWb Is Nothing Then
+            ' フォールバック：ActiveWorkbookを使用（targetWbが渡されていない場合）
             Set wb = ActiveWorkbook
         Else
             Set wb = targetWb
         End If
         
+        ' [FIX] ブックが無効な場合やパスが取得できない場合はデスクトップを使用
         If Not wb Is Nothing And Len(wb.path) > 0 Then
             解決出力先 = wb.path & "\PDF"
         Else
-            ' パスが取得できない場合はデスクトップ
+            ' パスが取得できない場合はデスクトップ（保存されていないブックの場合）
             解決出力先 = Environ$("USERPROFILE") & "\Desktop"
         End If
     End If

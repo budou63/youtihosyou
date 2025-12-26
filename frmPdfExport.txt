@@ -18,8 +18,19 @@ End Sub
 
 Private Sub UserForm_Initialize()
     ' === 出力対象ブックの確定 ===
+    ' [FIX] SetTargetWorkbook が呼ばれていない場合はエラーを表示
+    ' （アドイン化対応：ThisWorkbook依存を完全に排除）
     If mTargetWb Is Nothing Then
+        ' フォールバック：ActiveWorkbookを使用（SetTargetWorkbookが呼ばれていない場合）
+        ' ただし、これは本来 SetTargetWorkbook で設定されるべき
+        On Error Resume Next
         Set mTargetWb = ActiveWorkbook
+        If Err.Number <> 0 Or mTargetWb Is Nothing Then
+            MsgBox "出力対象ブックが設定されていません。" & vbCrLf & _
+                   "アドインの初期化に問題がある可能性があります。", vbCritical
+            Exit Sub
+        End If
+        On Error GoTo 0
     End If
 
     ' === フォームサイズの固定 ===
