@@ -55,7 +55,7 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
     colKey = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
     If colKey = 0 Then Err.Raise vbObjectError + 1, , "参照元「表」で見出し「転記」が見つかりません"
 
-    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colKey).End(xlUp).Row
+    lastSrcRow = wsSrc.Cells(wsSrc.rows.count, colKey).End(xlUp).Row
     If lastSrcRow < DATA_START_ROW Then GoTo CleanExit
 
     '--- 初期化（毎回クリア） ---
@@ -76,15 +76,19 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
         GoTo CleanExit
     End If
 
+    ' --- 件名の転記（A2は加工なし、A5は加工あり） ---
     Dim rawSubject As String
     rawSubject = GetValueByHeader(wsSrc, foundSingleRow, "件名")
-    subjectText = CleanTransferText(rawSubject)
-    ' A2: 未加工の件名 / A5: 加工後件名
+    
+    ' A2: 未加工の件名
     If rawSubject <> "" Then
         WriteMergedTopLeft wsDst.Range("A2"), rawSubject
+        hitAny = True
     End If
+    
+    ' A5: 加工後の件名（定型文言削除）
+    subjectText = CleanTransferText(rawSubject)
     If subjectText <> "" Then
-        WriteMergedTopLeft wsDst.Range("A2"), subjectText
         WriteMergedTopLeft wsDst.Range("A5"), subjectText
         hitAny = True
     End If
@@ -123,20 +127,17 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
 
     '========================
     ' 1) 縦詰め：移転補償種類 / 内訳額 / 数量（①～⑥）
-    '【修正】セット単位で行挿入判定を行い、1回だけ行挿入する
     '========================
     Dim currentRowBase As Long
     Dim bifStartRow As Long
     Dim bifEndRow As Long
-    Dim bifStarted As Boolean  '【追加】B/I/Fの最初の出力行を記録するためのフラグ
+    Dim bifStarted As Boolean
     currentRowBase = OUT_START_ROW
     bifStartRow = OUT_START_ROW
-    bifEndRow = OUT_START_ROW - 1  ' 初期値は開始行より1行前（データなしを意味）
-    bifStarted = False  '【追加】初期化
+    bifEndRow = OUT_START_ROW - 1
+    bifStarted = False
 
     For i = 1 To 6
-
-        ' このセット（①～⑥の1つ）で転記するデータを先に取得
         Dim vType As String, vAmt As String, vQty As String
         vType = ""
         vAmt = ""
@@ -164,18 +165,14 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
             vQty = Trim$(CStr(wsSrc.Cells(foundRow, colQty).Value))
         End If
 
-        ' このセットにデータがある場合のみ転記
         If vType <> "" Or vAmt <> "" Or vQty <> "" Then
-            '【修正】セット単位で行挿入判定（B/I/Fのいずれかに既存値があれば1回だけ行挿入）
             InsertRowIfAnyValue wsDst, currentRowBase, OUT_BASE_END_ROW, Array("B", "I", "F")
 
-            '【修正】最初にB/I/Fを書き込んだ行を正確に記録
             If Not bifStarted Then
                 bifStartRow = currentRowBase
                 bifStarted = True
             End If
 
-            ' 同じcurrentRowBaseにB/I/Fを書き込む
             If vType <> "" Then
                 WriteMergedTopLeft wsDst.Cells(currentRowBase, "B"), vType
                 hitAny = True
@@ -191,10 +188,8 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
                 hitAny = True
             End If
 
-            ' この行のB/I/Fの最大高さを取得して、次のrowBaseに進む
             Dim maxHeight As Long
             maxHeight = GetMaxHeightForRow(wsDst, currentRowBase, Array("B", "I", "F"))
-            ' B/I/Fの出力範囲を更新（最終行を記録）
             bifEndRow = currentRowBase + maxHeight - 1
             currentRowBase = currentRowBase + maxHeight
         End If
@@ -202,165 +197,73 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
     Next i
 
     '========================
-    ' 2) 契約年月日 / 申出日 / 竣工年月日（P/Q/R列）
-    '【修正】B/I/Fの出力行数に追従して、同じ値を繰り返し書き込む
+    ' 2) 契約年月日 / 申出日 / 竣工年月日等（P～W列）
     '========================
-    '--- 契約年月日（P列） ---
-    Dim colKeiyaku As Long
+    Dim colKeiyaku As Long, vKeiyaku As String
     colKeiyaku = FindHeaderCol(wsSrc, "契約年月日", HEADER_ROW)
-    Dim vKeiyaku As String
-    vKeiyaku = ""
-    If colKeiyaku > 0 Then
-        vKeiyaku = Trim$(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
-    End If
+    If colKeiyaku > 0 Then vKeiyaku = Trim$(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
 
-    '--- 申出日（Q列） ---
-    Dim colMoushutsu As Long
+    Dim colMoushutsu As Long, vMoushutsu As String
     colMoushutsu = FindHeaderCol(wsSrc, "申出日", HEADER_ROW)
-    Dim vMoushutsu As String
-    vMoushutsu = ""
-    If colMoushutsu > 0 Then
-        vMoushutsu = Trim$(CStr(wsSrc.Cells(foundRow, colMoushutsu).Value))
-    End If
+    If colMoushutsu > 0 Then vMoushutsu = Trim$(CStr(wsSrc.Cells(foundRow, colMoushutsu).Value))
 
-    '--- 竣工年月日（R列） ---
-    Dim colShunko As Long
+    Dim colShunko As Long, vShunko As String
     colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
-    Dim vShunko As String
-    vShunko = ""
-    If colShunko > 0 Then
-        vShunko = Trim$(CStr(wsSrc.Cells(foundRow, colShunko).Value))
-    End If
+    If colShunko > 0 Then vShunko = Trim$(CStr(wsSrc.Cells(foundRow, colShunko).Value))
 
-    '--- 竣工年月日（S列） ---
-    Dim colShunko2 As Long
+    Dim colShunko2 As Long, vShunko2 As String
     colShunko2 = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
-    Dim vShunko2 As String
-    vShunko2 = ""
-    If colShunko2 > 0 Then
-        vShunko2 = Trim$(CStr(wsSrc.Cells(foundRow, colShunko2).Value))
-    End If
+    If colShunko2 > 0 Then vShunko2 = Trim$(CStr(wsSrc.Cells(foundRow, colShunko2).Value))
 
-    '--- 検査・登記確認年月日（T列） ---
-    Dim colKensa As Long
+    Dim colKensa As Long, vKensa As String
     colKensa = FindHeaderCol(wsSrc, "検査・登記確認年月日", HEADER_ROW)
-    Dim vKensa As String
-    vKensa = ""
-    If colKensa > 0 Then
-        vKensa = Trim$(CStr(wsSrc.Cells(foundRow, colKensa).Value))
-    End If
+    If colKensa > 0 Then vKensa = Trim$(CStr(wsSrc.Cells(foundRow, colKensa).Value))
 
-    '--- 検査員（U列） ---
-    Dim colKensain As Long
+    Dim colKensain As Long, vKensain As String
     colKensain = FindHeaderCol(wsSrc, "検査員", HEADER_ROW)
-    Dim vKensain As String
-    vKensain = ""
-    If colKensain > 0 Then
-        vKensain = Trim$(CStr(wsSrc.Cells(foundRow, colKensain).Value))
-    End If
+    If colKensain > 0 Then vKensain = Trim$(CStr(wsSrc.Cells(foundRow, colKensain).Value))
 
-    '--- 始（最終）（V列） ---
-    Dim colStartFinal As Long
+    Dim colStartFinal As Long, vStartFinal As String
     colStartFinal = FindHeaderColByCandidates(wsSrc, Array("始（最終）", "始" & vbLf & "（最終）"), HEADER_ROW)
-    Dim vStartFinal As String
-    vStartFinal = ""
-    If colStartFinal > 0 Then
-        vStartFinal = Trim$(CStr(wsSrc.Cells(foundRow, colStartFinal).Value))
-    End If
+    If colStartFinal > 0 Then vStartFinal = Trim$(CStr(wsSrc.Cells(foundRow, colStartFinal).Value))
 
-    '--- 終（最終）（W列） ---
-    Dim colEndFinal As Long
+    Dim colEndFinal As Long, vEndFinal As String
     colEndFinal = FindHeaderColByCandidates(wsSrc, Array("終（最終）", "終" & vbLf & "（最終）"), HEADER_ROW)
-    Dim vEndFinal As String
-    vEndFinal = ""
-    If colEndFinal > 0 Then
-        vEndFinal = Trim$(CStr(wsSrc.Cells(foundRow, colEndFinal).Value))
-    End If
+    If colEndFinal > 0 Then vEndFinal = Trim$(CStr(wsSrc.Cells(foundRow, colEndFinal).Value))
 
-    ' B/I/Fが出力された場合、その範囲のすべての行にP/Q/R/S/T/U/V/Wを書き込む
-    If bifEndRow >= bifStartRow And (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vShunko2 <> "" _
-        Or vKensa <> "" Or vKensain <> "" Or vStartFinal <> "" Or vEndFinal <> "") Then
-        '【修正】B/I/Fの出力範囲を1行ずつループ（結合高さに依存しない方式）
-        ' 結合セルがある場合でも、同じMergeArea左上に複数回書いても結果は同じで安全
+    If bifEndRow >= bifStartRow Then
         Dim r As Long
         For r = bifStartRow To bifEndRow
-            ' 行挿入判定は行わない（B/I/F側で既に行挿入済み）
-            ' 結合セル対応で左上セルに書き込む
-            If vKeiyaku <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "P"), vKeiyaku
-                hitAny = True
-            End If
-
-            If vMoushutsu <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "Q"), vMoushutsu
-                hitAny = True
-            End If
-
-            If vShunko <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "R"), vShunko
-                hitAny = True
-            End If
-
-            If vShunko2 <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "S"), vShunko2
-                hitAny = True
-            End If
-
-            If vKensa <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "T"), vKensa
-                hitAny = True
-            End If
-
-            If vKensain <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "U"), vKensain
-                hitAny = True
-            End If
-
-            If vStartFinal <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "V"), vStartFinal
-                hitAny = True
-            End If
-
-            If vEndFinal <> "" Then
-                WriteMergedTopLeft wsDst.Cells(r, "W"), vEndFinal
-                hitAny = True
-            End If
+            If vKeiyaku <> "" Then WriteMergedTopLeft wsDst.Cells(r, "P"), vKeiyaku
+            If vMoushutsu <> "" Then WriteMergedTopLeft wsDst.Cells(r, "Q"), vMoushutsu
+            If vShunko <> "" Then WriteMergedTopLeft wsDst.Cells(r, "R"), vShunko
+            If vShunko2 <> "" Then WriteMergedTopLeft wsDst.Cells(r, "S"), vShunko2
+            If vKensa <> "" Then WriteMergedTopLeft wsDst.Cells(r, "T"), vKensa
+            If vKensain <> "" Then WriteMergedTopLeft wsDst.Cells(r, "U"), vKensain
+            If vStartFinal <> "" Then WriteMergedTopLeft wsDst.Cells(r, "V"), vStartFinal
+            If vEndFinal <> "" Then WriteMergedTopLeft wsDst.Cells(r, "W"), vEndFinal
         Next r
     End If
 
     '========================
     ' 3) 縦詰め転記：5,000万控除対象（①～⑥）
-    ' O列単独で縦詰め転記する
     '========================
     Dim currentRowO As Long
     currentRowO = OUT_START_ROW
 
     For i = 1 To 6
-        ' 見出し名を構築（例：「5,000万控除対象①」）
         Dim headerName As String
         headerName = "5,000万控除対象" & CircleNum(i)
-        
-        ' 見出し列を検索
         Dim colKoujo As Long
         colKoujo = FindHeaderCol(wsSrc, headerName, HEADER_ROW)
-        
-        ' 見出しが見つかった場合のみ値を取得
         Dim vKoujo As String
         vKoujo = ""
-        If colKoujo > 0 Then
-            vKoujo = Trim$(CStr(wsSrc.Cells(foundRow, colKoujo).Value))
-        End If
+        If colKoujo > 0 Then vKoujo = Trim$(CStr(wsSrc.Cells(foundRow, colKoujo).Value))
         
-        ' 空白でないものだけを転記
         If vKoujo <> "" Then
-            '【修正】セット単位で行挿入判定（O列に既存値があれば1回だけ行挿入）
             InsertRowIfAnyValue wsDst, currentRowO, OUT_BASE_END_ROW, Array("O")
-            
-            ' O列に書き込む
             WriteMergedTopLeft wsDst.Cells(currentRowO, "O"), vKoujo
             hitAny = True
-            
-            ' この行のO列の最大高さを取得して、次のrowBaseに進む
             Dim maxHeightO As Long
             maxHeightO = GetMaxHeightForRow(wsDst, currentRowO, Array("O"))
             currentRowO = currentRowO + maxHeightO
@@ -382,410 +285,202 @@ CleanFail:
     Application.EnableEvents = prevEE
     Application.Calculation = prevCalc
     MsgBox "転記中にエラー: " & Err.Description, vbCritical
-
 End Sub
-'==================================================
 
+'==================== 以降、サブ関数（変更なし） ====================
 
-'==================== クリアボタン用 ====================
 Public Sub 補償明細_クリア()
     Dim wsDst As Worksheet
     Dim prevSU As Boolean, prevEE As Boolean, prevCalc As XlCalculation
-
     prevSU = Application.ScreenUpdating
     prevEE = Application.EnableEvents
     prevCalc = Application.Calculation
-
     On Error GoTo CleanExit
     Application.ScreenUpdating = False
     Application.EnableEvents = False
     Application.Calculation = xlCalculationManual
-
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
-
-    If Not wsDst.Range("P1").HasFormula Then
-        wsDst.Range("P1").ClearContents
-    End If
+    If Not wsDst.Range("P1").HasFormula Then wsDst.Range("P1").ClearContents
     ClearSingleFields wsDst
     ClearVerticalArea wsDst
-
 CleanExit:
     Application.ScreenUpdating = prevSU
     Application.EnableEvents = prevEE
     Application.Calculation = prevCalc
     ThisWorkbook.Worksheets(DST_SHEET).Range("P1").Select
 End Sub
-'==================================================
 
-
-'==================== 単発：C5用文字列生成 ====================
 Private Function BuildAddressForC5(ByVal wsSrc As Worksheet, ByVal srcRow As Long) As String
-    Dim oaza As String
-    Dim chiban1 As String, chiban2 As String
-    Dim chiban3 As String
-    Dim s As String
-    Dim hasMore As Boolean
-
+    Dim oaza As String, chiban1 As String, chiban2 As String, chiban3 As String
+    Dim s As String, hasMore As Boolean
     oaza = Trim$(GetValueByHeader(wsSrc, srcRow, "大字①"))
     chiban1 = NormalizeChiban(Trim$(GetValueByHeader(wsSrc, srcRow, "元地番①")))
     chiban2 = NormalizeChiban(Trim$(GetValueByHeader(wsSrc, srcRow, "元地番②")))
     chiban3 = Trim$(GetValueByHeader(wsSrc, srcRow, "元地番③"))
-
     If chiban3 <> "" Then hasMore = True
-
     If oaza = "" And chiban1 = "" And chiban2 = "" Then
         BuildAddressForC5 = ""
         Exit Function
     End If
-
     s = "総社市"
     If oaza <> "" Then s = s & oaza
-
-    If chiban1 <> "" Then
-        s = s & chiban1
-    End If
-
+    If chiban1 <> "" Then s = s & chiban1
     If chiban2 <> "" Then
         If chiban1 <> "" Then s = s & "、"
         s = s & chiban2
     End If
-
     If hasMore Then s = s & "外"
-
     BuildAddressForC5 = s
 End Function
 
-
-' ハイフン→番地、無ければ末尾に番地
 Private Function NormalizeChiban(ByVal s As String) As String
-    If s = "" Then
-        NormalizeChiban = ""
-        Exit Function
-    End If
-
-    ' いろんなハイフンを統一的に扱う
+    If s = "" Then NormalizeChiban = "": Exit Function
     If InStr(s, "-") > 0 Or InStr(s, "－") > 0 Or InStr(s, "―") > 0 Or InStr(s, "‐") > 0 Then
-        s = Replace(s, "－", "-")
-        s = Replace(s, "―", "-")
-        s = Replace(s, "‐", "-")
+        s = Replace(s, "－", "-"): s = Replace(s, "―", "-"): s = Replace(s, "‐", "-")
         s = Replace(s, "-", "番地")
         NormalizeChiban = s
     Else
         NormalizeChiban = s & "番地"
     End If
 End Function
-'==================================================
 
-
-'==================== 共通：ヘッダ名から値取得 ====================
 Private Function GetValueByHeader(ByVal ws As Worksheet, ByVal srcRow As Long, ByVal headerName As String) As String
     Dim c As Long
     c = FindHeaderCol(ws, headerName, HEADER_ROW)
-    If c = 0 Then
-        GetValueByHeader = ""
-    Else
-        GetValueByHeader = Trim$(CStr(ws.Cells(srcRow, c).Value))
-    End If
+    If c = 0 Then GetValueByHeader = "" Else GetValueByHeader = Trim$(CStr(ws.Cells(srcRow, c).Value))
 End Function
-'==================================================
-
-
-'==================== 共通ヘルパー ====================
 
 Private Function GetOrOpenWorkbook(ByVal fileName As String) As Workbook
-    Dim wb As Workbook
-    Dim basePath As String
-    Dim fullPath As String
-    Dim altName As String
-    Dim foundPath As String
-
-    basePath = ThisWorkbook.Path
-    fullPath = basePath & "\" & fileName
-
+    Dim wb As Workbook, basePath As String, fullPath As String, altName As String, foundPath As String
+    basePath = ThisWorkbook.path: fullPath = basePath & "\" & fileName
     For Each wb In Application.Workbooks
-        If StrComp(wb.Name, fileName, vbTextCompare) = 0 Then
-            Set GetOrOpenWorkbook = wb
-            Exit Function
-        End If
+        If StrComp(wb.name, fileName, vbTextCompare) = 0 Then Set GetOrOpenWorkbook = wb: Exit Function
     Next wb
-
-    If Dir(fullPath) = "" Then
+    if Dir(fullPath) = "" Then
         altName = Dir(basePath & "\*工事*補助金改*.xlsm")
-        If altName <> "" Then
-            foundPath = basePath & "\" & altName
-        Else
-            Err.Raise vbObjectError + 100, , "参照元ブックが見つかりません: " & vbCrLf & fullPath
-        End If
+        If altName <> "" Then foundPath = basePath & "\" & altName Else Err.Raise vbObjectError + 100, , "参照元ブックが見つかりません"
     Else
         foundPath = fullPath
     End If
-
     Set GetOrOpenWorkbook = Application.Workbooks.Open(foundPath, ReadOnly:=True)
 End Function
 
-
 Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String, ByVal headerRow As Long) As Long
     Dim lastCol As Long, c As Long
-    lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
-
+    lastCol = ws.Cells(headerRow, ws.Columns.count).End(xlToLeft).Column
     For c = 1 To lastCol
-        If NormalizeHeaderText(CStr(ws.Cells(headerRow, c).Value)) = NormalizeHeaderText(headerName) Then
-            FindHeaderCol = c
-            Exit Function
-        End If
+        If NormalizeHeaderText(CStr(ws.Cells(headerRow, c).Value)) = NormalizeHeaderText(headerName) Then FindHeaderCol = c: Exit Function
     Next c
     FindHeaderCol = 0
 End Function
 
-
 Private Function FindHeaderColByCandidates(ByVal ws As Worksheet, ByVal headerNames As Variant, ByVal headerRow As Long) As Long
-    Dim i As Long
-    Dim colNum As Long
-
+    Dim i As Long, colNum As Long
     For i = LBound(headerNames) To UBound(headerNames)
         colNum = FindHeaderCol(ws, CStr(headerNames(i)), headerRow)
-        If colNum > 0 Then
-            FindHeaderColByCandidates = colNum
-            Exit Function
-        End If
+        If colNum > 0 Then FindHeaderColByCandidates = colNum: Exit Function
     Next i
     FindHeaderColByCandidates = 0
 End Function
 
-
 Private Function NormalizeHeaderText(ByVal s As String) As String
-    s = Replace$(s, vbCr, "")
-    s = Replace$(s, vbLf, "")
-    s = Replace$(s, "　", " ")
-    s = Trim$(s)
-    Do While InStr(s, "  ") > 0
-        s = Replace$(s, "  ", " ")
-    Loop
+    s = Replace$(s, vbCr, ""): s = Replace$(s, vbLf, ""): s = Replace$(s, "　", " "): s = Trim$(s)
+    Do While InStr(s, "  ") > 0: s = Replace$(s, "  ", " "): Loop
     s = Replace$(s, " ", "")
     NormalizeHeaderText = s
 End Function
 
-
-Private Function FindRowByKey(ByVal ws As Worksheet, ByVal keyCol As Long, ByVal key As String, _
-                             ByVal sRow As Long, ByVal eRow As Long) As Long
+Private Function FindRowByKey(ByVal ws As Worksheet, ByVal keyCol As Long, ByVal key As String, ByVal sRow As Long, ByVal eRow As Long) As Long
     Dim f As Range
-    Set f = ws.Range(ws.Cells(sRow, keyCol), ws.Cells(eRow, keyCol)) _
-             .Find(What:=key, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
-    If Not f Is Nothing Then
-        FindRowByKey = f.Row
-    Else
-        FindRowByKey = 0
-    End If
+    Set f = ws.Range(ws.Cells(sRow, keyCol), ws.Cells(eRow, keyCol)).Find(What:=key, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
+    If Not f Is Nothing Then FindRowByKey = f.Row Else FindRowByKey = 0
 End Function
 
-
-'【修正】結合セル対応の効率的なクリア処理（rを進める方式）
 Private Sub ClearMergedRange(ByVal ws As Worksheet, ByVal colLetter As String, ByVal sRow As Long, ByVal eRow As Long)
-    Dim r As Long
-    Dim c As Range, ma As Range
-    Dim colNum As Long
-    colNum = ws.Columns(colLetter).Column
-
-    r = sRow
+    Dim r As Long, c As Range, ma As Range, colNum As Long
+    colNum = ws.Columns(colLetter).Column: r = sRow
     Do While r <= eRow
         Set c = ws.Cells(r, colNum)
         If c.MergeCells Then
             Set ma = c.MergeArea
-            If Not MergeAreaHasFormula(ma) Then
-                ma.ClearContents
-            End If
-            r = ma.Row + ma.Rows.Count
+            If Not MergeAreaHasFormula(ma) Then ma.ClearContents
+            r = ma.Row + ma.rows.count
         Else
-            If Not c.HasFormula Then
-                c.ClearContents
-            End If
+            If Not c.HasFormula Then c.ClearContents
             r = r + 1
         End If
     Loop
 End Sub
 
-
 Private Sub ClearCellMerged(ByVal c As Range)
     If c.MergeCells Then
-        If Not MergeAreaHasFormula(c.MergeArea) Then
-            c.MergeArea.ClearContents
-        End If
+        If Not MergeAreaHasFormula(c.MergeArea) Then c.MergeArea.ClearContents
     Else
-        If Not c.HasFormula Then
-            c.ClearContents
-        End If
+        If Not c.HasFormula Then c.ClearContents
     End If
 End Sub
-
 
 Private Sub ClearSingleFields(ByVal ws As Worksheet)
-    ClearCellMerged ws.Range("A2")
-    ClearCellMerged ws.Range("A5")
-    ClearCellMerged ws.Range("C5")
-    ClearCellMerged ws.Range("G5")
-    ClearCellMerged ws.Range("L5")
+    ClearCellMerged ws.Range("A2"): ClearCellMerged ws.Range("A5")
+    ClearCellMerged ws.Range("C5"): ClearCellMerged ws.Range("G5"): ClearCellMerged ws.Range("L5")
 End Sub
-
 
 Private Sub ClearVerticalArea(ByVal ws As Worksheet)
-    Dim lastRowB As Long, lastRowI As Long, lastRowF As Long
-    Dim lastRowP As Long, lastRowQ As Long, lastRowR As Long
-    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long
-    Dim lastRowV As Long, lastRowW As Long
-    Dim lastRowO As Long
     Dim clearEnd As Long
-
-    lastRowB = ws.Cells(ws.Rows.Count, "B").End(xlUp).Row
-    lastRowI = ws.Cells(ws.Rows.Count, "I").End(xlUp).Row
-    lastRowF = ws.Cells(ws.Rows.Count, "F").End(xlUp).Row
-    lastRowP = ws.Cells(ws.Rows.Count, "P").End(xlUp).Row
-    lastRowQ = ws.Cells(ws.Rows.Count, "Q").End(xlUp).Row
-    lastRowR = ws.Cells(ws.Rows.Count, "R").End(xlUp).Row
-    lastRowS = ws.Cells(ws.Rows.Count, "S").End(xlUp).Row
-    lastRowT = ws.Cells(ws.Rows.Count, "T").End(xlUp).Row
-    lastRowU = ws.Cells(ws.Rows.Count, "U").End(xlUp).Row
-    lastRowV = ws.Cells(ws.Rows.Count, "V").End(xlUp).Row
-    lastRowW = ws.Cells(ws.Rows.Count, "W").End(xlUp).Row
-    lastRowO = ws.Cells(ws.Rows.Count, "O").End(xlUp).Row
-
-    clearEnd = WorksheetFunction.Max(OUT_BASE_END_ROW, lastRowB, lastRowI, lastRowF, lastRowP, lastRowQ, lastRowR, lastRowS, lastRowT, lastRowU, lastRowV, lastRowW, lastRowO)
-
-    ClearMergedRange ws, "B", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "I", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "F", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "P", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "Q", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "R", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "S", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "T", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "U", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "V", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "W", OUT_START_ROW, clearEnd
-    ClearMergedRange ws, "O", OUT_START_ROW, clearEnd
+    clearEnd = WorksheetFunction.Max(OUT_BASE_END_ROW, ws.Cells(ws.rows.count, "B").End(xlUp).Row, ws.Cells(ws.rows.count, "I").End(xlUp).Row, ws.Cells(ws.rows.count, "O").End(xlUp).Row, ws.Cells(ws.rows.count, "P").End(xlUp).Row)
+    ClearMergedRange ws, "B", OUT_START_ROW, clearEnd: ClearMergedRange ws, "I", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "F", OUT_START_ROW, clearEnd: ClearMergedRange ws, "P", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "Q", OUT_START_ROW, clearEnd: ClearMergedRange ws, "R", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "S", OUT_START_ROW, clearEnd: ClearMergedRange ws, "T", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "U", OUT_START_ROW, clearEnd: ClearMergedRange ws, "V", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "W", OUT_START_ROW, clearEnd: ClearMergedRange ws, "O", OUT_START_ROW, clearEnd
 End Sub
-
 
 Private Sub WriteMergedTopLeft(ByVal c As Range, ByVal v As String)
-    If c.MergeCells Then
-        c.MergeArea.Cells(1, 1).Value = v
-    Else
-        c.Value = v
-    End If
+    If c.MergeCells Then c.MergeArea.Cells(1, 1).Value = v Else c.Value = v
 End Sub
-
-
-Private Function GetMergeHeight(ByVal c As Range) As Long
-    If c.MergeCells Then
-        GetMergeHeight = c.MergeArea.Rows.Count
-    Else
-        GetMergeHeight = 1
-    End If
-End Function
-
 
 Private Function MergeAreaHasFormula(ByVal ma As Range) As Boolean
     Dim cell As Range
-    For Each cell In ma.Cells
-        If cell.HasFormula Then
-            MergeAreaHasFormula = True
-            Exit Function
-        End If
+    For Each cell In ma.Cells: If cell.HasFormula Then MergeAreaHasFormula = True: Exit Function
     Next cell
-    MergeAreaHasFormula = False
 End Function
 
-
-'【追加】複数列の結合セル高さの最大値を取得
 Private Function GetMaxHeightForRow(ByVal ws As Worksheet, ByVal rowNum As Long, ByVal colLetters As Variant) As Long
-    Dim i As Long, h As Long, maxH As Long
-    Dim colNum As Long
-    Dim c As Range
-
+    Dim i As Long, h As Long, maxH As Long, c As Range
     maxH = 1
     For i = LBound(colLetters) To UBound(colLetters)
-        colNum = ws.Columns(CStr(colLetters(i))).Column
-        Set c = ws.Cells(rowNum, colNum)
-        If c.MergeCells Then
-            h = c.MergeArea.Rows.Count
-        Else
-            h = 1
-        End If
+        Set c = ws.Cells(rowNum, ws.Columns(CStr(colLetters(i))).Column)
+        If c.MergeCells Then h = c.MergeArea.rows.count Else h = 1
         If h > maxH Then maxH = h
     Next i
-
     GetMaxHeightForRow = maxH
 End Function
 
-
-'【追加】指定行の指定列のいずれかに値があるかチェック
 Private Function HasAnyValueInRow(ByVal ws As Worksheet, ByVal rowNum As Long, ByVal colLetters As Variant) As Boolean
-    Dim i As Long
-    Dim colNum As Long
-    Dim c As Range
-    Dim v As String
-
+    Dim i As Long, c As Range, v As String
     For i = LBound(colLetters) To UBound(colLetters)
-        colNum = ws.Columns(CStr(colLetters(i))).Column
-        Set c = ws.Cells(rowNum, colNum)
-
-        ' 結合セルの場合は左上セルを確認
-        If c.MergeCells Then
-            v = Trim$(CStr(c.MergeArea.Cells(1, 1).Value))
-        Else
-            v = Trim$(CStr(c.Value))
-        End If
-
-        If v <> "" Then
-            HasAnyValueInRow = True
-            Exit Function
-        End If
+        Set c = ws.Cells(rowNum, ws.Columns(CStr(colLetters(i))).Column)
+        If c.MergeCells Then v = Trim$(CStr(c.MergeArea.Cells(1, 1).Value)) Else v = Trim$(CStr(c.Value))
+        If v <> "" Then HasAnyValueInRow = True: Exit Function
     Next i
-
-    HasAnyValueInRow = False
 End Function
 
-
-'【追加】指定行の指定列のいずれかに既存値があれば行挿入（セット単位で1回だけ）
 Private Sub InsertRowIfAnyValue(ByVal ws As Worksheet, ByVal rowNum As Long, ByVal baseEnd As Long, ByVal colLetters As Variant)
-    ' baseEndを超えている場合は行挿入
-    If rowNum > baseEnd Then
-        ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
-        Exit Sub
-    End If
-
-    ' baseEnd以内でも、指定列のいずれかに既存値がある場合は行挿入
-    If HasAnyValueInRow(ws, rowNum, colLetters) Then
-        ws.Rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
-    End If
+    If rowNum > baseEnd Then ws.rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove: Exit Sub
+    If HasAnyValueInRow(ws, rowNum, colLetters) Then ws.rows(rowNum).Insert Shift:=xlShiftDown, CopyOrigin:=xlFormatFromLeftOrAbove
 End Sub
-
 
 Private Function CircleNum(ByVal n As Long) As String
     Select Case n
-        Case 1: CircleNum = "①"
-        Case 2: CircleNum = "②"
-        Case 3: CircleNum = "③"
-        Case 4: CircleNum = "④"
-        Case 5: CircleNum = "⑤"
-        Case 6: CircleNum = "⑥"
-        Case 7: CircleNum = "⑦"
-        Case 8: CircleNum = "⑧"
-        Case 9: CircleNum = "⑨"
-        Case 10: CircleNum = "⑩"
+        Case 1: CircleNum = "①": Case 2: CircleNum = "②": Case 3: CircleNum = "③"
+        Case 4: CircleNum = "④": Case 5: CircleNum = "⑤": Case 6: CircleNum = "⑥"
         Case Else: CircleNum = CStr(n)
     End Select
 End Function
 
-
 Private Function CleanTransferText(ByVal s As String) As String
-    If s = "" Then
-        CleanTransferText = ""
-        Exit Function
-    End If
-
-    s = Replace$(s, "に伴う物件移転補償費", "")
-    s = Replace$(s, "に伴う用地費", "")
+    If s = "" Then CleanTransferText = "": Exit Function
+    s = Replace$(s, "に伴う物件移転補償費", ""): s = Replace$(s, "に伴う用地費", "")
     CleanTransferText = s
 End Function
-
-'==================================================
