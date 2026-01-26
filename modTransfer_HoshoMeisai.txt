@@ -403,7 +403,9 @@ Public Sub 補償明細_クリア()
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    wsDst.Range("P1").ClearContents
+    If Not wsDst.Range("P1").HasFormula Then
+        wsDst.Range("P1").ClearContents
+    End If
     ClearSingleFields wsDst
     ClearVerticalArea wsDst
 
