@@ -520,12 +520,23 @@ Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String
     lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
 
     For c = 1 To lastCol
-        If Trim$(CStr(ws.Cells(headerRow, c).Value)) = headerName Then
+        If NormalizeHeaderText(CStr(ws.Cells(headerRow, c).Value)) = NormalizeHeaderText(headerName) Then
             FindHeaderCol = c
             Exit Function
         End If
     Next c
     FindHeaderCol = 0
+End Function
+
+
+Private Function NormalizeHeaderText(ByVal s As String) As String
+    s = Replace$(s, "　", " ")
+    s = Trim$(s)
+    Do While InStr(s, "  ") > 0
+        s = Replace$(s, "  ", " ")
+    Loop
+    s = Replace$(s, " ", "")
+    NormalizeHeaderText = s
 End Function
 
 
