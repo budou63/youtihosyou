@@ -76,7 +76,13 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
         GoTo CleanExit
     End If
 
-    subjectText = CleanTransferText(GetValueByHeader(wsSrc, foundSingleRow, "件名"))
+    Dim rawSubject As String
+    rawSubject = GetValueByHeader(wsSrc, foundSingleRow, "件名")
+    subjectText = CleanTransferText(rawSubject)
+    ' A2: 未加工の件名 / A5: 加工後件名
+    If rawSubject <> "" Then
+        WriteMergedTopLeft wsDst.Range("A2"), rawSubject
+    End If
     If subjectText <> "" Then
         WriteMergedTopLeft wsDst.Range("A2"), subjectText
         WriteMergedTopLeft wsDst.Range("A5"), subjectText
