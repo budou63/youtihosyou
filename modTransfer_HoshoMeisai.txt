@@ -78,6 +78,7 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
 
     subjectText = CleanTransferText(GetValueByHeader(wsSrc, foundSingleRow, "件名"))
     If subjectText <> "" Then
+        WriteMergedTopLeft wsDst.Range("A2"), subjectText
         WriteMergedTopLeft wsDst.Range("A5"), subjectText
         hitAny = True
     End If
@@ -530,6 +531,8 @@ End Function
 
 
 Private Function NormalizeHeaderText(ByVal s As String) As String
+    s = Replace$(s, vbCr, "")
+    s = Replace$(s, vbLf, "")
     s = Replace$(s, "　", " ")
     s = Trim$(s)
     Do While InStr(s, "  ") > 0
