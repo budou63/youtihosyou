@@ -76,7 +76,13 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
         GoTo CleanExit
     End If
 
-    subjectText = CleanTransferText(GetValueByHeader(wsSrc, foundSingleRow, "件名"))
+    Dim rawSubject As String
+    rawSubject = GetValueByHeader(wsSrc, foundSingleRow, "件名")
+    subjectText = CleanTransferText(rawSubject)
+    ' A2: 未加工の件名 / A5: 加工後件名
+    If rawSubject <> "" Then
+        WriteMergedTopLeft wsDst.Range("A2"), rawSubject
+    End If
     If subjectText <> "" Then
         WriteMergedTopLeft wsDst.Range("A5"), subjectText
         hitAny = True
@@ -225,8 +231,54 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
         vShunko = Trim$(CStr(wsSrc.Cells(foundRow, colShunko).Value))
     End If
 
-    ' B/I/Fが出力された場合、その範囲のすべての行にP/Q/Rを書き込む
-    If bifEndRow >= bifStartRow And (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "") Then
+    '--- 竣工年月日（S列） ---
+    Dim colShunko2 As Long
+    colShunko2 = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
+    Dim vShunko2 As String
+    vShunko2 = ""
+    If colShunko2 > 0 Then
+        vShunko2 = Trim$(CStr(wsSrc.Cells(foundRow, colShunko2).Value))
+    End If
+
+    '--- 検査・登記確認年月日（T列） ---
+    Dim colKensa As Long
+    colKensa = FindHeaderCol(wsSrc, "検査・登記確認年月日", HEADER_ROW)
+    Dim vKensa As String
+    vKensa = ""
+    If colKensa > 0 Then
+        vKensa = Trim$(CStr(wsSrc.Cells(foundRow, colKensa).Value))
+    End If
+
+    '--- 検査員（U列） ---
+    Dim colKensain As Long
+    colKensain = FindHeaderCol(wsSrc, "検査員", HEADER_ROW)
+    Dim vKensain As String
+    vKensain = ""
+    If colKensain > 0 Then
+        vKensain = Trim$(CStr(wsSrc.Cells(foundRow, colKensain).Value))
+    End If
+
+    '--- 始（最終）（V列） ---
+    Dim colStartFinal As Long
+    colStartFinal = FindHeaderColByCandidates(wsSrc, Array("始（最終）", "始" & vbLf & "（最終）"), HEADER_ROW)
+    Dim vStartFinal As String
+    vStartFinal = ""
+    If colStartFinal > 0 Then
+        vStartFinal = Trim$(CStr(wsSrc.Cells(foundRow, colStartFinal).Value))
+    End If
+
+    '--- 終（最終）（W列） ---
+    Dim colEndFinal As Long
+    colEndFinal = FindHeaderColByCandidates(wsSrc, Array("終（最終）", "終" & vbLf & "（最終）"), HEADER_ROW)
+    Dim vEndFinal As String
+    vEndFinal = ""
+    If colEndFinal > 0 Then
+        vEndFinal = Trim$(CStr(wsSrc.Cells(foundRow, colEndFinal).Value))
+    End If
+
+    ' B/I/Fが出力された場合、その範囲のすべての行にP/Q/R/S/T/U/V/Wを書き込む
+    If bifEndRow >= bifStartRow And (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vShunko2 <> "" _
+        Or vKensa <> "" Or vKensain <> "" Or vStartFinal <> "" Or vEndFinal <> "") Then
         '【修正】B/I/Fの出力範囲を1行ずつループ（結合高さに依存しない方式）
         ' 結合セルがある場合でも、同じMergeArea左上に複数回書いても結果は同じで安全
         Dim r As Long
@@ -245,6 +297,31 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
 
             If vShunko <> "" Then
                 WriteMergedTopLeft wsDst.Cells(r, "R"), vShunko
+                hitAny = True
+            End If
+
+            If vShunko2 <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "S"), vShunko2
+                hitAny = True
+            End If
+
+            If vKensa <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "T"), vKensa
+                hitAny = True
+            End If
+
+            If vKensain <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "U"), vKensain
+                hitAny = True
+            End If
+
+            If vStartFinal <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "V"), vStartFinal
+                hitAny = True
+            End If
+
+            If vEndFinal <> "" Then
+                WriteMergedTopLeft wsDst.Cells(r, "W"), vEndFinal
                 hitAny = True
             End If
         Next r
@@ -325,7 +402,9 @@ Public Sub 補償明細_クリア()
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    wsDst.Range("P1").ClearContents
+    If Not wsDst.Range("P1").HasFormula Then
+        wsDst.Range("P1").ClearContents
+    End If
     ClearSingleFields wsDst
     ClearVerticalArea wsDst
 
@@ -449,12 +528,40 @@ Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String
     lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
 
     For c = 1 To lastCol
-        If Trim$(CStr(ws.Cells(headerRow, c).Value)) = headerName Then
+        If NormalizeHeaderText(CStr(ws.Cells(headerRow, c).Value)) = NormalizeHeaderText(headerName) Then
             FindHeaderCol = c
             Exit Function
         End If
     Next c
     FindHeaderCol = 0
+End Function
+
+
+Private Function FindHeaderColByCandidates(ByVal ws As Worksheet, ByVal headerNames As Variant, ByVal headerRow As Long) As Long
+    Dim i As Long
+    Dim colNum As Long
+
+    For i = LBound(headerNames) To UBound(headerNames)
+        colNum = FindHeaderCol(ws, CStr(headerNames(i)), headerRow)
+        If colNum > 0 Then
+            FindHeaderColByCandidates = colNum
+            Exit Function
+        End If
+    Next i
+    FindHeaderColByCandidates = 0
+End Function
+
+
+Private Function NormalizeHeaderText(ByVal s As String) As String
+    s = Replace$(s, vbCr, "")
+    s = Replace$(s, vbLf, "")
+    s = Replace$(s, "　", " ")
+    s = Trim$(s)
+    Do While InStr(s, "  ") > 0
+        s = Replace$(s, "  ", " ")
+    Loop
+    s = Replace$(s, " ", "")
+    NormalizeHeaderText = s
 End Function
 
 
@@ -483,10 +590,14 @@ Private Sub ClearMergedRange(ByVal ws As Worksheet, ByVal colLetter As String, B
         Set c = ws.Cells(r, colNum)
         If c.MergeCells Then
             Set ma = c.MergeArea
-            ma.ClearContents
+            If Not MergeAreaHasFormula(ma) Then
+                ma.ClearContents
+            End If
             r = ma.Row + ma.Rows.Count
         Else
-            c.ClearContents
+            If Not c.HasFormula Then
+                c.ClearContents
+            End If
             r = r + 1
         End If
     Loop
@@ -495,14 +606,19 @@ End Sub
 
 Private Sub ClearCellMerged(ByVal c As Range)
     If c.MergeCells Then
-        c.MergeArea.ClearContents
+        If Not MergeAreaHasFormula(c.MergeArea) Then
+            c.MergeArea.ClearContents
+        End If
     Else
-        c.ClearContents
+        If Not c.HasFormula Then
+            c.ClearContents
+        End If
     End If
 End Sub
 
 
 Private Sub ClearSingleFields(ByVal ws As Worksheet)
+    ClearCellMerged ws.Range("A2")
     ClearCellMerged ws.Range("A5")
     ClearCellMerged ws.Range("C5")
     ClearCellMerged ws.Range("G5")
@@ -513,6 +629,8 @@ End Sub
 Private Sub ClearVerticalArea(ByVal ws As Worksheet)
     Dim lastRowB As Long, lastRowI As Long, lastRowF As Long
     Dim lastRowP As Long, lastRowQ As Long, lastRowR As Long
+    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long
+    Dim lastRowV As Long, lastRowW As Long
     Dim lastRowO As Long
     Dim clearEnd As Long
 
@@ -522,9 +640,14 @@ Private Sub ClearVerticalArea(ByVal ws As Worksheet)
     lastRowP = ws.Cells(ws.Rows.Count, "P").End(xlUp).Row
     lastRowQ = ws.Cells(ws.Rows.Count, "Q").End(xlUp).Row
     lastRowR = ws.Cells(ws.Rows.Count, "R").End(xlUp).Row
+    lastRowS = ws.Cells(ws.Rows.Count, "S").End(xlUp).Row
+    lastRowT = ws.Cells(ws.Rows.Count, "T").End(xlUp).Row
+    lastRowU = ws.Cells(ws.Rows.Count, "U").End(xlUp).Row
+    lastRowV = ws.Cells(ws.Rows.Count, "V").End(xlUp).Row
+    lastRowW = ws.Cells(ws.Rows.Count, "W").End(xlUp).Row
     lastRowO = ws.Cells(ws.Rows.Count, "O").End(xlUp).Row
 
-    clearEnd = WorksheetFunction.Max(OUT_BASE_END_ROW, lastRowB, lastRowI, lastRowF, lastRowP, lastRowQ, lastRowR, lastRowO)
+    clearEnd = WorksheetFunction.Max(OUT_BASE_END_ROW, lastRowB, lastRowI, lastRowF, lastRowP, lastRowQ, lastRowR, lastRowS, lastRowT, lastRowU, lastRowV, lastRowW, lastRowO)
 
     ClearMergedRange ws, "B", OUT_START_ROW, clearEnd
     ClearMergedRange ws, "I", OUT_START_ROW, clearEnd
@@ -532,6 +655,11 @@ Private Sub ClearVerticalArea(ByVal ws As Worksheet)
     ClearMergedRange ws, "P", OUT_START_ROW, clearEnd
     ClearMergedRange ws, "Q", OUT_START_ROW, clearEnd
     ClearMergedRange ws, "R", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "S", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "T", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "U", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "V", OUT_START_ROW, clearEnd
+    ClearMergedRange ws, "W", OUT_START_ROW, clearEnd
     ClearMergedRange ws, "O", OUT_START_ROW, clearEnd
 End Sub
 
@@ -551,6 +679,18 @@ Private Function GetMergeHeight(ByVal c As Range) As Long
     Else
         GetMergeHeight = 1
     End If
+End Function
+
+
+Private Function MergeAreaHasFormula(ByVal ma As Range) As Boolean
+    Dim cell As Range
+    For Each cell In ma.Cells
+        If cell.HasFormula Then
+            MergeAreaHasFormula = True
+            Exit Function
+        End If
+    Next cell
+    MergeAreaHasFormula = False
 End Function
 
 
