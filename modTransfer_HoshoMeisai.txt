@@ -602,6 +602,7 @@ End Sub
 
 
 Private Sub ClearSingleFields(ByVal ws As Worksheet)
+    ClearCellMerged ws.Range("A2")
     ClearCellMerged ws.Range("A5")
     ClearCellMerged ws.Range("C5")
     ClearCellMerged ws.Range("G5")
