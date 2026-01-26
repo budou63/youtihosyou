@@ -84,6 +84,7 @@ Public Sub 補償明細_移転補償種類_内訳額_住所業者地番_転記()
         WriteMergedTopLeft wsDst.Range("A2"), rawSubject
     End If
     If subjectText <> "" Then
+        WriteMergedTopLeft wsDst.Range("A2"), subjectText
         WriteMergedTopLeft wsDst.Range("A5"), subjectText
         hitAny = True
     End If
