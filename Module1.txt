@@ -102,7 +102,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
 
     trigCells = Split(TRIG_ADDRS, ",")
     For Each addr In trigCells
-        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
             foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
             If foundRow > 0 Then
@@ -269,6 +269,8 @@ Private Sub 住所転記_F5()
         GoTo CleanExit
     End If
 
+    Debug.Print key, colTransfer, colJusho, foundRow
+
     jusho = CleanText(CStr(wsSrc.Cells(foundRow, colJusho).Value))
 
     If jusho <> "" Then
@@ -402,7 +404,7 @@ Public Sub 用地明細_クリア()
 
     '--- 出力部の最終行を算出（行挿入に対応） ---
     ' 【追加要件③】S, T, U列も最終行算出に含める
-    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", "S", "T", "U"), 11, 20)
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", "S", "T", "U", "V"), 11, 20)
 
     '--- 縦詰め出力をクリア ---
     ClearOutputMerged wsDst, "B", 11, lastRow   ' 大字
@@ -417,6 +419,7 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "S", 11, lastRow   ' 契約年月日
     ClearOutputMerged wsDst, "T", 11, lastRow   ' 申出日
     ClearOutputMerged wsDst, "U", 11, lastRow   ' 竣工年月日
+    ClearOutputMerged wsDst, "V", 11, lastRow   ' 登記事項
 
     '--- 任意：S1 を選択 ---
     wsDst.Range("S1").Select
@@ -452,6 +455,7 @@ End Sub
 ' ⑤ 契約年月日：S11～（S列）
 ' ⑥ 申出日：T11～（T列）
 ' ⑦ 竣工年月日：U11～（U列）
+' ⑧ 登記事項：V11～（V列）
 ' 
 ' トリガー：S1/T1/U1
 ' 処理方式：毎回全体をクリアしてから、B～M列の実出力ブロックに同じ値を繰り返し転記
@@ -480,8 +484,8 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
     Dim trigCells As Variant, addr As Variant, key As String
     Dim outRow As Long, currentRow As Long, blockStart As Long, blockEnd As Long
-    Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long
-    Dim vKeiyaku As String, vMoushutsu As String, vShunko As String
+    Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long, colRegInfo As Long
+    Dim vKeiyaku As String, vMoushutsu As String, vShunko As String, vRegInfo As String
     Dim h As Long
     Dim outStartRow As Long, outBaseEndRow As Long
 
@@ -499,16 +503,18 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    '--- ① 出力エリア（S11～Uの転記範囲）を毎回すべてクリア ---
+    '--- ① 出力エリア（S11～Vの転記範囲）を毎回すべてクリア ---
     ' 結合セル対応で、左上セル基準で確実に消すこと
-    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, clearEnd As Long
+    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, lastRowV As Long, clearEnd As Long
     lastRowS = wsDst.Cells(wsDst.Rows.Count, "S").End(xlUp).Row
     lastRowT = wsDst.Cells(wsDst.Rows.Count, "T").End(xlUp).Row
     lastRowU = wsDst.Cells(wsDst.Rows.Count, "U").End(xlUp).Row
-    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU)
+    lastRowV = wsDst.Cells(wsDst.Rows.Count, "V").End(xlUp).Row
+    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU, lastRowV)
     ClearOutputMerged wsDst, "S", outStartRow, clearEnd
     ClearOutputMerged wsDst, "T", outStartRow, clearEnd
     ClearOutputMerged wsDst, "U", outStartRow, clearEnd
+    ClearOutputMerged wsDst, "V", outStartRow, clearEnd
 
     '--- ② 参照元シートの準備 ---
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -524,12 +530,13 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     colKeiyaku = FindHeaderCol(wsSrc, "契約年月日", HEADER_ROW)
     colMoushutsu = FindHeaderCol(wsSrc, "申出日", HEADER_ROW)
     colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
+    colRegInfo = FindHeaderCol(wsSrc, "登記事項", HEADER_ROW)
 
     '--- ③ トリガーセルを順に処理し、B～Mの実出力ブロックに同期 ---
     trigCells = Split(TRIG_ADDRS, ",")
 
     For Each addr In trigCells
-        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
             foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
             If foundRow > 0 Then
@@ -538,6 +545,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     vKeiyaku = ""
                     vMoushutsu = ""
                     vShunko = ""
+                    vRegInfo = ""
 
                     If colKeiyaku > 0 Then
                         vKeiyaku = CleanText(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
@@ -548,12 +556,15 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     If colShunko > 0 Then
                         vShunko = CleanText(CStr(wsSrc.Cells(foundRow, colShunko).Value))
                     End If
+                    If colRegInfo > 0 Then
+                        vRegInfo = CleanTextKeepLineBreaks(CStr(wsSrc.Cells(foundRow, colRegInfo).Value))
+                    End If
 
-                    '--- ⑤ 出力ブロック範囲にS～Uを同一値で繰り返し転記 ---
-                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "") Then
+                    '--- ⑤ 出力ブロック範囲にS～Vを同一値で繰り返し転記 ---
+                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "") Then
                         currentRow = blockStart
                         Do While currentRow < blockEnd
-                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U")
+                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V")
 
                             If vKeiyaku <> "" Then
                                 WriteToMergedTopLeft wsDst, "S", currentRow, vKeiyaku
@@ -564,8 +575,12 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                             If vShunko <> "" Then
                                 WriteToMergedTopLeft wsDst, "U", currentRow, vShunko
                             End If
+                            If vRegInfo <> "" Then
+                                WriteToMergedTopLeft wsDst, "V", currentRow, vRegInfo
+                                SetWrapTextMerged wsDst, "V", currentRow, True
+                            End If
 
-                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U"))
+                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V"))
                             currentRow = currentRow + h
                         Loop
                     End If
@@ -685,7 +700,7 @@ Private Sub Transfer_OneHeaderSeries_Vertical( _
     trigCells = Split(TRIG_ADDRS, ",")
     For Each addr In trigCells
 
-        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
 
             foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
@@ -786,7 +801,7 @@ Private Sub Transfer_SingleHeader_Vertical( _
     If colTarget = 0 Then GoTo CleanExit  ' 見出しが見つからない場合はスキップ（エラーにしない）
 
     ' 【修正②】指定された1つのトリガーのみを使用（TRIG_ADDRS を Split して回さない）
-    key = Trim$(CStr(wsDst.Range(trigAddr).Value))
+    key = NormalizeKey(wsDst.Range(trigAddr).Value)
     If key <> "" Then  ' 空白の場合は何も転記しない
 
         foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
@@ -818,6 +833,24 @@ CleanFail:
     MsgBox "転記中にエラー: " & Err.Description, vbExclamation
 End Sub
 
+'==================== キーの正規化（Trim/CStr で型ゆれを吸収） ====================
+Private Function NormalizeKey(ByVal v As Variant) As String
+    NormalizeKey = Trim$(CStr(v))
+End Function
+
+'==================== 見出し名の正規化（改行・空白揺れ対策） ====================
+Private Function NormalizeHeader(ByVal v As Variant) As String
+    Dim t As String
+    t = CStr(v)
+    t = Replace(t, vbCrLf, "")
+    t = Replace(t, vbCr, "")
+    t = Replace(t, vbLf, "")
+    t = Replace(t, vbTab, "")
+    t = Replace(t, " ", "")
+    t = Replace(t, ChrW(12288), "")
+    NormalizeHeader = Trim$(t)
+End Function
+
 '==================== 【修正②】トリガーセルから最初の有効なキーを取得 ====================
 ' S1 → T1 → U1 の順で、最初に値が入っているトリガーセルの転記コードを取得
 Private Function GetFirstTriggerKey(ByVal wsDst As Worksheet) As String
@@ -826,7 +859,7 @@ Private Function GetFirstTriggerKey(ByVal wsDst As Worksheet) As String
     
     trigCells = Split(TRIG_ADDRS, ",")
     For Each addr In trigCells
-        key = Trim$(CStr(wsDst.Range(CStr(addr)).Value))
+        key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
             GetFirstTriggerKey = key
             Exit Function
@@ -909,7 +942,7 @@ Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String
     Dim lastCol As Long, c As Long
     lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
     For c = 1 To lastCol
-        If CStr(ws.Cells(headerRow, c).Value) = headerName Then
+        If NormalizeHeader(ws.Cells(headerRow, c).Value) = NormalizeHeader(headerName) Then
             FindHeaderCol = c
             Exit Function
         End If
@@ -919,10 +952,25 @@ End Function
 
 '==================== キー一致行を検索（完全一致） ====================
 Private Function FindRowByKey(ByVal ws As Worksheet, ByVal keyCol As Long, ByVal key As String, ByVal startRow As Long, ByVal lastRow As Long) As Long
-    Dim rng As Range, f As Range
-    Set rng = ws.Range(ws.Cells(startRow, keyCol), ws.Cells(lastRow, keyCol))
-    Set f = rng.Find(What:=key, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
-    If Not f Is Nothing Then FindRowByKey = f.Row Else FindRowByKey = 0
+    Dim r As Long
+    Dim normKey As String
+    Dim cellKey As String
+
+    normKey = NormalizeKey(key)
+    If normKey = "" Then
+        FindRowByKey = 0
+        Exit Function
+    End If
+
+    For r = startRow To lastRow
+        cellKey = NormalizeKey(ws.Cells(r, keyCol).Value)
+        If cellKey = normKey Then
+            FindRowByKey = r
+            Exit Function
+        End If
+    Next r
+
+    FindRowByKey = 0
 End Function
 
 '==================== ブロック境界記録：初期化 ====================
@@ -1001,6 +1049,21 @@ Private Function CleanText(ByVal s As String) As String
         t = Trim$(t)
     End If
     CleanText = t
+End Function
+
+'==================== 文字整形（登記事項向け：改行保持） ====================
+Private Function CleanTextKeepLineBreaks(ByVal s As String) As String
+    Dim t As String
+    t = s
+    t = Replace(t, vbTab, "")
+    t = Replace(t, vbCrLf, vbLf)
+    t = Replace(t, vbCr, vbLf)
+    t = Trim$(t)
+    If t <> "" Then
+        t = Replace(t, "に伴う用地費", "")
+        t = Trim$(t)
+    End If
+    CleanTextKeepLineBreaks = t
 End Function
 
 '==================== 結合対応：単一セルクリア（MergeArea単位） ====================
@@ -1165,6 +1228,21 @@ Private Sub WriteToMergedTopLeft(ByVal ws As Worksheet, ByVal colLetter As Strin
         ma.Cells(1, 1).Value = valueText
     Else
         c.Value = valueText
+    End If
+End Sub
+
+'==================== 結合対応：WrapText 設定（MergeArea単位） ====================
+Private Sub SetWrapTextMerged(ByVal ws As Worksheet, ByVal colLetter As String, ByVal rowNum As Long, ByVal wrapValue As Boolean)
+    Dim colNum As Long
+    Dim c As Range, ma As Range
+    colNum = ws.Columns(colLetter).Column
+    Set c = ws.Cells(rowNum, colNum)
+
+    If c.MergeCells Then
+        Set ma = c.MergeArea
+        ma.WrapText = wrapValue
+    Else
+        c.WrapText = wrapValue
     End If
 End Sub
 
