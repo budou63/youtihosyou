@@ -235,6 +235,7 @@ Private Sub 住所転記_F5()
     Dim lastSrcRow As Long, foundRow As Long
     Dim jusho As String
     Dim rngF5 As Range
+    Dim prevEnableEvents As Boolean
 
     On Error GoTo CleanFail
 
@@ -275,18 +276,26 @@ Private Sub 住所転記_F5()
     jusho = CleanText(CStr(wsSrc.Cells(foundRow, colJusho).Value))
 
     If jusho <> "" Then
+        prevEnableEvents = Application.EnableEvents
+        Application.EnableEvents = False
         WriteToMergedTopLeft wsDst, "F", 5, jusho
+        If rngF5.MergeCells Then
+            rngF5.MergeArea.Cells(1, 1).Value = jusho
+        Else
+            rngF5.Value = jusho
+        End If
+        Application.EnableEvents = prevEnableEvents
     Else
-        If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
+        ClearCellContentsMergedSafe rngF5
     End If
 
 CleanExit:
+    Application.EnableEvents = prevEnableEvents
     Exit Sub
 
 CleanFail:
-    If Not rngF5 Is Nothing Then
-        If rngF5.MergeCells Then rngF5.MergeArea.ClearContents Else rngF5.ClearContents
-    End If
+    Application.EnableEvents = prevEnableEvents
+    If Not rngF5 Is Nothing Then ClearCellContentsMergedSafe rngF5
     Exit Sub
 End Sub
 
