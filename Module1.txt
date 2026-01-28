@@ -270,6 +270,8 @@ Private Sub 住所転記_F5()
         GoTo CleanExit
     End If
 
+    Debug.Print key, colTransfer, colJusho, foundRow
+
     jusho = CleanText(CStr(wsSrc.Cells(foundRow, colJusho).Value))
 
     If jusho <> "" Then
@@ -626,7 +628,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                         vShunko = CleanText(CStr(wsSrc.Cells(foundRow, colShunko).Value))
                     End If
                     If colRegInfo > 0 Then
-                        vRegInfo = CleanText(CStr(wsSrc.Cells(foundRow, colRegInfo).Value))
+                        vRegInfo = CleanTextKeepLineBreaks(CStr(wsSrc.Cells(foundRow, colRegInfo).Value))
                     End If
 
                     '--- ⑤ 出力ブロック範囲にS～Vを同一値で繰り返し転記 ---
@@ -646,6 +648,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                             End If
                             If vRegInfo <> "" Then
                                 WriteToMergedTopLeft wsDst, "V", currentRow, vRegInfo
+                                SetWrapTextMerged wsDst, "V", currentRow, True
                             End If
 
                             h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V"))
@@ -907,6 +910,19 @@ Private Function NormalizeKey(ByVal v As Variant) As String
     NormalizeKey = Trim$(CStr(v))
 End Function
 
+'==================== 見出し名の正規化（改行・空白揺れ対策） ====================
+Private Function NormalizeHeader(ByVal v As Variant) As String
+    Dim t As String
+    t = CStr(v)
+    t = Replace(t, vbCrLf, "")
+    t = Replace(t, vbCr, "")
+    t = Replace(t, vbLf, "")
+    t = Replace(t, vbTab, "")
+    t = Replace(t, " ", "")
+    t = Replace(t, ChrW(12288), "")
+    NormalizeHeader = Trim$(t)
+End Function
+
 '==================== 【修正②】トリガーセルから最初の有効なキーを取得 ====================
 ' S1 → T1 → U1 の順で、最初に値が入っているトリガーセルの転記コードを取得
 Private Function GetFirstTriggerKey(ByVal wsDst As Worksheet) As String
@@ -998,7 +1014,7 @@ Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String
     Dim lastCol As Long, c As Long
     lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
     For c = 1 To lastCol
-        If CStr(ws.Cells(headerRow, c).Value) = headerName Then
+        If NormalizeHeader(ws.Cells(headerRow, c).Value) = NormalizeHeader(headerName) Then
             FindHeaderCol = c
             Exit Function
         End If
@@ -1105,6 +1121,21 @@ Private Function CleanText(ByVal s As String) As String
         t = Trim$(t)
     End If
     CleanText = t
+End Function
+
+'==================== 文字整形（登記事項向け：改行保持） ====================
+Private Function CleanTextKeepLineBreaks(ByVal s As String) As String
+    Dim t As String
+    t = s
+    t = Replace(t, vbTab, "")
+    t = Replace(t, vbCrLf, vbLf)
+    t = Replace(t, vbCr, vbLf)
+    t = Trim$(t)
+    If t <> "" Then
+        t = Replace(t, "に伴う用地費", "")
+        t = Trim$(t)
+    End If
+    CleanTextKeepLineBreaks = t
 End Function
 
 '==================== 結合対応：単一セルクリア（MergeArea単位） ====================
@@ -1269,6 +1300,21 @@ Private Sub WriteToMergedTopLeft(ByVal ws As Worksheet, ByVal colLetter As Strin
         ma.Cells(1, 1).Value = valueText
     Else
         c.Value = valueText
+    End If
+End Sub
+
+'==================== 結合対応：WrapText 設定（MergeArea単位） ====================
+Private Sub SetWrapTextMerged(ByVal ws As Worksheet, ByVal colLetter As String, ByVal rowNum As Long, ByVal wrapValue As Boolean)
+    Dim colNum As Long
+    Dim c As Range, ma As Range
+    colNum = ws.Columns(colLetter).Column
+    Set c = ws.Cells(rowNum, colNum)
+
+    If c.MergeCells Then
+        Set ma = c.MergeArea
+        ma.WrapText = wrapValue
+    Else
+        c.WrapText = wrapValue
     End If
 End Sub
 
