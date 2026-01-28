@@ -12,6 +12,7 @@ Private Const SRC_FILE_PATTERN As String = "*工事*補助金改*.xlsm"  ' な�
 '==================== 参照先（土地調書） ====================
 Private Const DST_SHEET As String = "用地明細"
 Private Const TRIG_ADDRS As String = "S1,T1,U1"  ' トリガー入力セル（S→T→U）
+Private Const REG_INFO_CELL As String = "J5"  ' B5=件名/F5=住所/M5=施工業者の並びに合わせ、同じ5行目の空き領域を登記事項用に確保
 
 '==================== ブロック境界記録（B～Mの実出力結果に基づく） ====================
 ' 各トリガーの「実際に書き込んだ行」を Range として記録し、
@@ -354,6 +355,75 @@ CleanFail:
     Exit Sub
 End Sub
 
+'======================================================================
+' 登記事項転記：REG_INFO_CELL に参照元「表」シートの「登記事項」を転記
+'======================================================================
+Private Sub 登記事項転記_RegInfo()
+
+    Dim wbSrc As Workbook, wsSrc As Worksheet
+    Dim wsDst As Worksheet
+    Dim key As String
+    Dim colTransfer As Long, colRegInfo As Long
+    Dim lastSrcRow As Long, foundRow As Long
+    Dim regInfo As String
+    Dim rngRegInfo As Range
+    Dim colLetter As String
+    Dim rowNum As Long
+
+    On Error GoTo CleanFail
+
+    Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    Set rngRegInfo = wsDst.Range(REG_INFO_CELL)
+    colLetter = Split(rngRegInfo.Address(False, False), "$")(0)
+    rowNum = rngRegInfo.Row
+
+    ' 【修正②】S1 → T1 → U1 の順で最初に値が入っているトリガーセルのキーを取得
+    key = GetFirstTriggerKey(wsDst)
+
+    If key = "" Then
+        ClearCellContentsMergedSafe rngRegInfo
+        GoTo CleanExit
+    End If
+
+    Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
+    Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
+
+    colTransfer = FindHeaderCol(wsSrc, "転記", HEADER_ROW)
+    If colTransfer = 0 Then Err.Raise vbObjectError + 100, , "参照元「表」シートに見出し「転記」が見つかりません。"
+
+    colRegInfo = FindHeaderCol(wsSrc, "登記事項", HEADER_ROW)
+    If colRegInfo = 0 Then Err.Raise vbObjectError + 140, , "参照元「表」シートに見出し「登記事項」が見つかりません。"
+
+    lastSrcRow = wsSrc.Cells(wsSrc.Rows.Count, colTransfer).End(xlUp).Row
+    If lastSrcRow < DATA_START_ROW Then
+        ClearCellContentsMergedSafe rngRegInfo
+        GoTo CleanExit
+    End If
+
+    foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+    If foundRow = 0 Then
+        ClearCellContentsMergedSafe rngRegInfo
+        GoTo CleanExit
+    End If
+
+    regInfo = CleanText(CStr(wsSrc.Cells(foundRow, colRegInfo).Value))
+
+    If regInfo <> "" Then
+        WriteToMergedTopLeft wsDst, colLetter, rowNum, regInfo
+    Else
+        ClearCellContentsMergedSafe rngRegInfo
+    End If
+
+CleanExit:
+    Exit Sub
+
+CleanFail:
+    If Not rngRegInfo Is Nothing Then
+        ClearCellContentsMergedSafe rngRegInfo
+    End If
+    Exit Sub
+End Sub
+
 '==================== クリア用：最終データ行を取得（指定列群の最大） ====================
 Private Function GetLastDataRow(ByVal ws As Worksheet, ByVal colLetters As Variant, ByVal startRow As Long, ByVal defaultEndRow As Long) As Long
     Dim i As Long, colNum As Long
@@ -401,6 +471,7 @@ Public Sub 用地明細_クリア()
     ClearCellContentsMergedSafe wsDst.Range("B5")
     ClearCellContentsMergedSafe wsDst.Range("F5")
     ClearCellContentsMergedSafe wsDst.Range("M5")
+    ClearCellContentsMergedSafe wsDst.Range(REG_INFO_CELL)
 
     '--- 出力部の最終行を算出（行挿入に対応） ---
     ' 【追加要件③】S, T, U列も最終行算出に含める
@@ -624,6 +695,7 @@ Public Sub 用地一括転記_ワンクリック()
     Call 件名転記_B5
     Call 住所転記_F5
     Call 施工業者債権者転記_M5
+    Call 登記事項転記_RegInfo
     Call 大字縦詰め転記_TUV_B
     Call 字縦詰め転記_TUV_C
     Call 用地項目縦詰め転記_TUV_FGIKM
