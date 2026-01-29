@@ -131,6 +131,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
         key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
             foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+            ' Debug.Print "key=", key, "foundRow=", foundRow ' ★FIX: X列 公募地目（必要なら有効化）
             If foundRow > 0 Then
 
                 For i = LBound(suffixes) To UBound(suffixes)
@@ -645,7 +646,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     ClearOutputMerged wsDst, "U", outStartRow, clearEnd
     ClearOutputMerged wsDst, "V", outStartRow, clearEnd
     ClearOutputMerged wsDst, "W", outStartRow, clearEnd ' ★FIX: W列も毎回クリア対象に追加
-    ClearOutputMerged wsDst, "X", outStartRow, clearEnd ' ★FIX: X列 公簿地目を毎回クリア対象に追加
+    ClearOutputMerged wsDst, "X", outStartRow, clearEnd ' ★FIX: X列 公募地目を毎回クリア対象に追加
 
     '--- ② 参照元シートの準備 ---
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -663,7 +664,8 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
     colRegInfo = FindHeaderCol(wsSrc, "登記事項", HEADER_ROW)
     colKifu = FindHeaderCol(wsSrc, "寄附等理由事業", HEADER_ROW) ' ★FIX: W列用見出しを追加
-    colKouboChimoku = FindHeaderCol(wsSrc, "公簿地目", HEADER_ROW) ' ★FIX: X列 公簿地目を追加
+    colKouboChimoku = FindHeaderCol(wsSrc, "公募地目", HEADER_ROW) ' ★FIX: X列 公募地目を追加
+    ' Debug.Print "colKouboChimoku=", colKouboChimoku ' ★FIX: X列 公募地目（必要なら有効化）
 
     '--- ③ トリガーセルを順に処理し、B～Mの実出力ブロックに同期 ---
     trigCells = Split(TRIG_ADDRS, ",")
@@ -680,7 +682,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     vShunko = ""
                     vRegInfo = ""
                     vKifu = "" ' ★FIX: W列用
-                    vKouboChimoku = "" ' ★FIX: X列 公簿地目用
+                    vKouboChimoku = "" ' ★FIX: X列 公募地目用
 
                     If colKeiyaku > 0 Then
                         vKeiyaku = CleanText(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
@@ -698,14 +700,15 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                         vKifu = CleanText(CStr(wsSrc.Cells(foundRow, colKifu).Value)) ' ★FIX: 寄附等理由事業を取得
                     End If
                     If colKouboChimoku > 0 Then
-                        vKouboChimoku = CleanText(CStr(wsSrc.Cells(foundRow, colKouboChimoku).Value)) ' ★FIX: X列 公簿地目を取得
+                        vKouboChimoku = CleanText(CStr(wsSrc.Cells(foundRow, colKouboChimoku).Value)) ' ★FIX: X列 公募地目を取得
+                        ' Debug.Print "vKouboChimoku=", vKouboChimoku ' ★FIX: X列 公募地目（必要なら有効化）
                     End If
 
                     '--- ⑤ 出力ブロック範囲にS～Vを同一値で繰り返し転記 ---
-                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "" Or vKifu <> "" Or vKouboChimoku <> "") Then ' ★FIX: X列 公簿地目を判定に追加
+                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "" Or vKifu <> "" Or vKouboChimoku <> "") Then ' ★FIX: X列 公募地目を判定に追加
                         currentRow = blockStart
                         Do While currentRow < blockEnd
-                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V", "W", "X") ' ★FIX: X列 公簿地目を対象に追加
+                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V", "W", "X") ' ★FIX: X列 公募地目を対象に追加
 
                             If vKeiyaku <> "" Then
                                 WriteToMergedTopLeft wsDst, "S", currentRow, vKeiyaku
@@ -724,10 +727,11 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                                 WriteToMergedTopLeft wsDst, "W", currentRow, vKifu ' ★FIX: W列へ転記
                             End If
                             If vKouboChimoku <> "" Then
-                                WriteToMergedTopLeft wsDst, "X", currentRow, vKouboChimoku ' ★FIX: X列 公簿地目へ転記
+                                WriteToMergedTopLeft wsDst, "X", currentRow, vKouboChimoku ' ★FIX: X列 公募地目へ転記
+                                ' Debug.Print "Write X row=", currentRow ' ★FIX: X列 公募地目（必要なら有効化）
                             End If
 
-                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V", "W", "X")) ' ★FIX: X列 公簿地目を高さ判定に追加
+                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V", "W", "X")) ' ★FIX: X列 公募地目を高さ判定に追加
                             currentRow = currentRow + h
                         Loop
                     End If
