@@ -665,6 +665,9 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     colRegInfo = FindHeaderCol(wsSrc, "登記事項", HEADER_ROW)
     colKifu = FindHeaderCol(wsSrc, "寄附等理由事業", HEADER_ROW) ' ★FIX: W列用見出しを追加
     colKouboChimoku = FindHeaderCol(wsSrc, "公募地目", HEADER_ROW) ' ★FIX: X列 公募地目を追加
+    If colKouboChimoku = 0 Then
+        colKouboChimoku = FindHeaderCol(wsSrc, "公簿地目", HEADER_ROW) ' ★FIX: X列 公募地目（表記ゆれ対策）
+    End If
     ' Debug.Print "colKouboChimoku=", colKouboChimoku ' ★FIX: X列 公募地目（必要なら有効化）
 
     '--- ③ トリガーセルを順に処理し、B～Mの実出力ブロックに同期 ---
