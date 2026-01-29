@@ -131,6 +131,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
         key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
             foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
+            ' Debug.Print "key=", key, "foundRow=", foundRow ' ★FIX: X列 公募地目（必要なら有効化）
             If foundRow > 0 Then
 
                 For i = LBound(suffixes) To UBound(suffixes)
@@ -612,8 +613,8 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
     Dim trigCells As Variant, addr As Variant, key As String
     Dim outRow As Long, currentRow As Long, blockStart As Long, blockEnd As Long
-    Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long, colRegInfo As Long
-    Dim vKeiyaku As String, vMoushutsu As String, vShunko As String, vRegInfo As String
+    Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long, colRegInfo As Long, colKifu As Long, colKouboChimoku As Long
+    Dim vKeiyaku As String, vMoushutsu As String, vShunko As String, vRegInfo As String, vKifu As String, vKouboChimoku As String
     Dim h As Long
     Dim outStartRow As Long, outBaseEndRow As Long
 
@@ -632,16 +633,20 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
     '--- ① 出力エリア（S11～Vの転記範囲）を毎回すべてクリア ---
-    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, lastRowV As Long, clearEnd As Long
+    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, lastRowV As Long, lastRowW As Long, lastRowX As Long, clearEnd As Long
     lastRowS = wsDst.Cells(wsDst.rows.count, "S").End(xlUp).Row
     lastRowT = wsDst.Cells(wsDst.rows.count, "T").End(xlUp).Row
     lastRowU = wsDst.Cells(wsDst.rows.count, "U").End(xlUp).Row
     lastRowV = wsDst.Cells(wsDst.rows.count, "V").End(xlUp).Row
-    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU, lastRowV)
+    lastRowW = wsDst.Cells(wsDst.rows.count, "W").End(xlUp).Row
+    lastRowX = wsDst.Cells(wsDst.rows.count, "X").End(xlUp).Row
+    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU, lastRowV, lastRowW, lastRowX)
     ClearOutputMerged wsDst, "S", outStartRow, clearEnd
     ClearOutputMerged wsDst, "T", outStartRow, clearEnd
     ClearOutputMerged wsDst, "U", outStartRow, clearEnd
     ClearOutputMerged wsDst, "V", outStartRow, clearEnd
+    ClearOutputMerged wsDst, "W", outStartRow, clearEnd ' ★FIX: W列も毎回クリア対象に追加
+    ClearOutputMerged wsDst, "X", outStartRow, clearEnd ' ★FIX: X列 公募地目を毎回クリア対象に追加
 
     '--- ② 参照元シートの準備 ---
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -658,6 +663,9 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     colMoushutsu = FindHeaderCol(wsSrc, "申出日", HEADER_ROW)
     colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
     colRegInfo = FindHeaderCol(wsSrc, "登記事項", HEADER_ROW)
+    colKifu = FindHeaderCol(wsSrc, "寄附等理由事業", HEADER_ROW) ' ★FIX: W列用見出しを追加
+    colKouboChimoku = FindHeaderCol(wsSrc, "公募地目", HEADER_ROW) ' ★FIX: X列 公募地目を追加
+    ' Debug.Print "colKouboChimoku=", colKouboChimoku ' ★FIX: X列 公募地目（必要なら有効化）
 
     '--- ③ トリガーセルを順に処理し、B～Mの実出力ブロックに同期 ---
     trigCells = Split(TRIG_ADDRS, ",")
@@ -673,6 +681,8 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     vMoushutsu = ""
                     vShunko = ""
                     vRegInfo = ""
+                    vKifu = "" ' ★FIX: W列用
+                    vKouboChimoku = "" ' ★FIX: X列 公募地目用
 
                     If colKeiyaku > 0 Then
                         vKeiyaku = CleanText(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
@@ -686,12 +696,19 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     If colRegInfo > 0 Then
                         vRegInfo = CleanTextKeepLineBreaks(CStr(wsSrc.Cells(foundRow, colRegInfo).Value))
                     End If
+                    If colKifu > 0 Then
+                        vKifu = CleanText(CStr(wsSrc.Cells(foundRow, colKifu).Value)) ' ★FIX: 寄附等理由事業を取得
+                    End If
+                    If colKouboChimoku > 0 Then
+                        vKouboChimoku = CleanText(CStr(wsSrc.Cells(foundRow, colKouboChimoku).Value)) ' ★FIX: X列 公募地目を取得
+                        ' Debug.Print "vKouboChimoku=", vKouboChimoku ' ★FIX: X列 公募地目（必要なら有効化）
+                    End If
 
                     '--- ⑤ 出力ブロック範囲にS～Vを同一値で繰り返し転記 ---
-                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "") Then
+                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "" Or vKifu <> "" Or vKouboChimoku <> "") Then ' ★FIX: X列 公募地目を判定に追加
                         currentRow = blockStart
                         Do While currentRow < blockEnd
-                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V")
+                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V", "W", "X") ' ★FIX: X列 公募地目を対象に追加
 
                             If vKeiyaku <> "" Then
                                 WriteToMergedTopLeft wsDst, "S", currentRow, vKeiyaku
@@ -706,8 +723,15 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                                 WriteToMergedTopLeft wsDst, "V", currentRow, vRegInfo
                                 SetWrapTextMerged wsDst, "V", currentRow, True
                             End If
+                            If vKifu <> "" Then
+                                WriteToMergedTopLeft wsDst, "W", currentRow, vKifu ' ★FIX: W列へ転記
+                            End If
+                            If vKouboChimoku <> "" Then
+                                WriteToMergedTopLeft wsDst, "X", currentRow, vKouboChimoku ' ★FIX: X列 公募地目へ転記
+                                ' Debug.Print "Write X row=", currentRow ' ★FIX: X列 公募地目（必要なら有効化）
+                            End If
 
-                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V"))
+                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V", "W", "X")) ' ★FIX: X列 公募地目を高さ判定に追加
                             currentRow = currentRow + h
                         Loop
                     End If
@@ -1426,4 +1450,3 @@ Private Function GetMergedHeightMulti(ByVal ws As Worksheet, ByVal rowNum As Lon
 
     GetMergedHeightMulti = maxH
 End Function
-
