@@ -60,8 +60,8 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Dim trigCells As Variant, addr As Variant, key As String
     Dim outRow As Long, baseEnd As Long
     Dim suffixes As Variant, i As Long
-    Dim vGenkyo As String, vKobo As String, vJisoku As String, vTanka As String, vKaisyu As String
-    Dim colGenkyo As Long, colKobo As Long, colJisoku As Long, colTanka As Long, colKaisyu As Long
+    Dim vGenkyo As String, vKobo As String, vJisoku As String, vTanka As String, vKaisyu As String, vChoboChimoku As String
+    Dim colGenkyo As Long, colKobo As Long, colJisoku As Long, colTanka As Long, colKaisyu As Long, colChoboChimoku As Long
     Dim h As Long
 
     prevScreenUpdating = Application.ScreenUpdating
@@ -75,45 +75,29 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    ' 【重要な修正】F5の値を保存してからクリア処理
-    Dim rngF5 As Range
-    Set rngF5 = wsDst.Range("F5")
-    Dim savedF5Value As String
-    If rngF5.MergeCells Then
-        savedF5Value = CStr(rngF5.MergeArea.Cells(1, 1).Value)
-    Else
-        savedF5Value = CStr(rngF5.Value)
-    End If
-
     ' 【修正①】クリア：実際の最終行までクリア（残骸防止）
     baseEnd = 20
-    Dim lastRowF As Long, lastRowG As Long, lastRowI As Long, lastRowK As Long, lastRowM As Long
-    Dim clearEndF As Long, clearEndG As Long, clearEndI As Long, clearEndK As Long, clearEndM As Long
+    Dim lastRowF As Long, lastRowG As Long, lastRowI As Long, lastRowK As Long, lastRowM As Long, lastRowX As Long
+    Dim clearEndF As Long, clearEndG As Long, clearEndI As Long, clearEndK As Long, clearEndM As Long, clearEndX As Long
     lastRowF = wsDst.Cells(wsDst.rows.count, "F").End(xlUp).Row
     lastRowG = wsDst.Cells(wsDst.rows.count, "G").End(xlUp).Row
     lastRowI = wsDst.Cells(wsDst.rows.count, "I").End(xlUp).Row
     lastRowK = wsDst.Cells(wsDst.rows.count, "K").End(xlUp).Row
     lastRowM = wsDst.Cells(wsDst.rows.count, "M").End(xlUp).Row
+    lastRowX = wsDst.Cells(wsDst.rows.count, "X").End(xlUp).Row
     clearEndF = WorksheetFunction.Max(baseEnd, lastRowF)
     clearEndG = WorksheetFunction.Max(baseEnd, lastRowG)
     clearEndI = WorksheetFunction.Max(baseEnd, lastRowI)
     clearEndK = WorksheetFunction.Max(baseEnd, lastRowK)
     clearEndM = WorksheetFunction.Max(baseEnd, lastRowM)
+    clearEndX = WorksheetFunction.Max(baseEnd, lastRowX)
     ClearOutputMerged wsDst, "F", 11, clearEndF
     ClearOutputMerged wsDst, "G", 11, clearEndG
     ClearOutputMerged wsDst, "I", 11, clearEndI
     ClearOutputMerged wsDst, "K", 11, clearEndK
     ClearOutputMerged wsDst, "M", 11, clearEndM
+    ClearOutputMerged wsDst, "X", 11, clearEndX
     outRow = 11
-
-    ' 【重要な修正】F5の値を復元
-    If savedF5Value <> "" Then
-        If rngF5.MergeCells Then
-            rngF5.MergeArea.Cells(1, 1).Value = savedF5Value
-        Else
-            rngF5.Value = savedF5Value
-        End If
-    End If
 
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
     Set wsSrc = wbSrc.Worksheets(SRC_SHEET)
@@ -143,25 +127,28 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
 
                     colTanka = FindHeaderCol(wsSrc, "単価" & CStr(suffixes(i)), HEADER_ROW)
                     colKaisyu = FindHeaderCol(wsSrc, "買収金額" & CStr(suffixes(i)), HEADER_ROW)
+                    colChoboChimoku = FindHeaderCol(wsSrc, "公簿地目" & CStr(suffixes(i)), HEADER_ROW)
 
                     vGenkyo = IIf(colGenkyo > 0, CleanText(CStr(wsSrc.Cells(foundRow, colGenkyo).Value)), "")
                     vKobo = IIf(colKobo > 0, CleanText(CStr(wsSrc.Cells(foundRow, colKobo).Value)), "")
                     vJisoku = IIf(colJisoku > 0, CleanText(CStr(wsSrc.Cells(foundRow, colJisoku).Value)), "")
                     vTanka = IIf(colTanka > 0, CleanText(CStr(wsSrc.Cells(foundRow, colTanka).Value)), "")
                     vKaisyu = IIf(colKaisyu > 0, CleanText(CStr(wsSrc.Cells(foundRow, colKaisyu).Value)), "")
+                    vChoboChimoku = IIf(colChoboChimoku > 0, CleanText(CStr(wsSrc.Cells(foundRow, colChoboChimoku).Value)), "")
 
-                    If (vGenkyo & vKobo & vJisoku & vTanka & vKaisyu) <> "" Then
+                    If (vGenkyo & vKobo & vJisoku & vTanka & vKaisyu & vChoboChimoku) <> "" Then
 
-                        EnsureWritableRowMulti wsDst, outRow, baseEnd, Array("F", "G", "I", "K", "M")
+                        EnsureWritableRowMulti wsDst, outRow, baseEnd, Array("F", "G", "I", "K", "M", "X")
 
                         If vGenkyo <> "" Then WriteToMergedTopLeft wsDst, "F", outRow, vGenkyo
                         If vKobo <> "" Then WriteToMergedTopLeft wsDst, "G", outRow, vKobo
                         If vJisoku <> "" Then WriteToMergedTopLeft wsDst, "I", outRow, vJisoku
                         If vTanka <> "" Then WriteToMergedTopLeft wsDst, "K", outRow, vTanka
                         If vKaisyu <> "" Then WriteToMergedTopLeft wsDst, "M", outRow, vKaisyu
+                        If vChoboChimoku <> "" Then WriteToMergedTopLeft wsDst, "X", outRow, vChoboChimoku
                         RecordBlockRow key, wsDst, outRow
 
-                        h = GetMergedHeightMulti(wsDst, outRow, Array("F", "G", "I", "K", "M"))
+                        h = GetMergedHeightMulti(wsDst, outRow, Array("F", "G", "I", "K", "M", "X"))
                         outRow = outRow + h
                     End If
 
@@ -171,16 +158,6 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Next addr
 
 CleanExit:
-    ' 【重要な修正】最後にもう一度F5の値を復元（念のため）
-    If savedF5Value <> "" Then
-        Set rngF5 = wsDst.Range("F5")
-        If rngF5.MergeCells Then
-            rngF5.MergeArea.Cells(1, 1).Value = savedF5Value
-        Else
-            rngF5.Value = savedF5Value
-        End If
-    End If
-    
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
     Application.Calculation = prevCalc
@@ -533,7 +510,7 @@ Public Sub 用地明細_クリア()
     Saved_J5_Value = ""
 
     '--- 出力部の最終行を算出（行挿入に対応） ---
-    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", "S", "T", "U", "V"), 11, 20)
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", "S", "T", "U", "V", "W", "X"), 11, 20)
 
     '--- 縦詰め出力をクリア ---
     ClearOutputMerged wsDst, "B", 11, lastRow
@@ -548,6 +525,8 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "T", 11, lastRow
     ClearOutputMerged wsDst, "U", 11, lastRow
     ClearOutputMerged wsDst, "V", 11, lastRow
+    ClearOutputMerged wsDst, "W", 11, lastRow
+    ClearOutputMerged wsDst, "X", 11, lastRow
 
     '--- 任意：S1 を選択 ---
     wsDst.Range("S1").Select
@@ -612,8 +591,8 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     Dim colTransfer As Long, lastSrcRow As Long, foundRow As Long
     Dim trigCells As Variant, addr As Variant, key As String
     Dim outRow As Long, currentRow As Long, blockStart As Long, blockEnd As Long
-    Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long, colRegInfo As Long
-    Dim vKeiyaku As String, vMoushutsu As String, vShunko As String, vRegInfo As String
+    Dim colKeiyaku As Long, colMoushutsu As Long, colShunko As Long, colRegInfo As Long, colKifu As Long
+    Dim vKeiyaku As String, vMoushutsu As String, vShunko As String, vRegInfo As String, vKifu As String
     Dim h As Long
     Dim outStartRow As Long, outBaseEndRow As Long
 
@@ -632,16 +611,18 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
     '--- ① 出力エリア（S11～Vの転記範囲）を毎回すべてクリア ---
-    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, lastRowV As Long, clearEnd As Long
+    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, lastRowV As Long, lastRowW As Long, clearEnd As Long
     lastRowS = wsDst.Cells(wsDst.rows.count, "S").End(xlUp).Row
     lastRowT = wsDst.Cells(wsDst.rows.count, "T").End(xlUp).Row
     lastRowU = wsDst.Cells(wsDst.rows.count, "U").End(xlUp).Row
     lastRowV = wsDst.Cells(wsDst.rows.count, "V").End(xlUp).Row
-    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU, lastRowV)
+    lastRowW = wsDst.Cells(wsDst.rows.count, "W").End(xlUp).Row
+    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU, lastRowV, lastRowW)
     ClearOutputMerged wsDst, "S", outStartRow, clearEnd
     ClearOutputMerged wsDst, "T", outStartRow, clearEnd
     ClearOutputMerged wsDst, "U", outStartRow, clearEnd
     ClearOutputMerged wsDst, "V", outStartRow, clearEnd
+    ClearOutputMerged wsDst, "W", outStartRow, clearEnd
 
     '--- ② 参照元シートの準備 ---
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -658,6 +639,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     colMoushutsu = FindHeaderCol(wsSrc, "申出日", HEADER_ROW)
     colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
     colRegInfo = FindHeaderCol(wsSrc, "登記事項", HEADER_ROW)
+    colKifu = FindHeaderCol(wsSrc, "寄附等理由事業", HEADER_ROW)
 
     '--- ③ トリガーセルを順に処理し、B～Mの実出力ブロックに同期 ---
     trigCells = Split(TRIG_ADDRS, ",")
@@ -673,6 +655,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     vMoushutsu = ""
                     vShunko = ""
                     vRegInfo = ""
+                    vKifu = ""
 
                     If colKeiyaku > 0 Then
                         vKeiyaku = CleanText(CStr(wsSrc.Cells(foundRow, colKeiyaku).Value))
@@ -686,12 +669,15 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     If colRegInfo > 0 Then
                         vRegInfo = CleanTextKeepLineBreaks(CStr(wsSrc.Cells(foundRow, colRegInfo).Value))
                     End If
+                    If colKifu > 0 Then
+                        vKifu = CleanText(CStr(wsSrc.Cells(foundRow, colKifu).Value))
+                    End If
 
                     '--- ⑤ 出力ブロック範囲にS～Vを同一値で繰り返し転記 ---
-                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "") Then
+                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "" Or vKifu <> "") Then
                         currentRow = blockStart
                         Do While currentRow < blockEnd
-                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V")
+                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V", "W")
 
                             If vKeiyaku <> "" Then
                                 WriteToMergedTopLeft wsDst, "S", currentRow, vKeiyaku
@@ -706,8 +692,12 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                                 WriteToMergedTopLeft wsDst, "V", currentRow, vRegInfo
                                 SetWrapTextMerged wsDst, "V", currentRow, True
                             End If
+                            If vKifu <> "" Then
+                                WriteToMergedTopLeft wsDst, "W", currentRow, vKifu
+                                SetWrapTextMerged wsDst, "W", currentRow, True
+                            End If
 
-                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V"))
+                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V", "W"))
                             currentRow = currentRow + h
                         Loop
                     End If
