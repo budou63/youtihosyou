@@ -505,8 +505,10 @@ Public Sub 用地明細_クリア()
     Dim wsDst As Worksheet
     Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
     Dim lastRow As Long
+    Dim formulaM22 As String
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    formulaM22 = wsDst.Range("M22").Formula
 
     prevScreenUpdating = Application.ScreenUpdating
     prevEnableEvents = Application.EnableEvents
@@ -535,7 +537,8 @@ Public Sub 用地明細_クリア()
     Saved_J5_Value = ""
 
     '--- 出力部の最終行を算出（行挿入に対応） ---
-    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", _
+    ' M22にはSUM関数があるため、M列は最終行判定から除外して集計行を保護する。
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", _
                                             "S", "T", "U", "V", "W", "X", _
                                             "Z", "AA", "AB", "AC", "AD", "AE", _
                                             "AF", "AG", "AH", "AI", "AJ", "AK"), 11, 20)
@@ -548,7 +551,8 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "G", 11, lastRow
     ClearOutputMerged wsDst, "I", 11, lastRow
     ClearOutputMerged wsDst, "K", 11, lastRow
-    ClearOutputMerged wsDst, "M", 11, lastRow
+    ' M22は集計用SUM関数のため、M列だけは明細範囲（M11～M21）に限定してクリアする。
+    ClearOutputMerged wsDst, "M", 11, 21
     ClearOutputMerged wsDst, "S", 11, lastRow
     ClearOutputMerged wsDst, "T", 11, lastRow
     ClearOutputMerged wsDst, "U", 11, lastRow
@@ -568,6 +572,9 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "AJ", 11, lastRow
     ClearOutputMerged wsDst, "AK", 11, lastRow
 
+    '--- 集計用SUM関数を保護 ---
+    wsDst.Range("M22").Formula = formulaM22
+
     '--- 任意：S1 を選択 ---
     wsDst.Range("S1").Select
     ResetBlockTracking
@@ -579,6 +586,9 @@ CleanExit:
     Exit Sub
 
 CleanFail:
+    If Not wsDst Is Nothing Then
+        wsDst.Range("M22").Formula = formulaM22
+    End If
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
     Application.Calculation = prevCalc
