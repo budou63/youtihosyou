@@ -64,6 +64,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Dim vGenkyo As String, vKobo As String, vJisoku As String, vTanka As String, vKaisyu As String
     Dim colGenkyo As Long, colKobo As Long, colJisoku As Long, colTanka As Long, colKaisyu As Long
     Dim h As Long
+    Dim formulaM22 As String
 
     prevScreenUpdating = Application.ScreenUpdating
     prevEnableEvents = Application.EnableEvents
@@ -75,6 +76,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Application.Calculation = xlCalculationManual
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    formulaM22 = GetFormulaMergedSafe(wsDst.Range("M22"))
 
     ' 【重要な修正】F5の値を保存してからクリア処理
     Dim rngF5 As Range
@@ -105,6 +107,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     ClearOutputMerged wsDst, "I", 11, clearEndI
     ClearOutputMerged wsDst, "K", 11, clearEndK
     ClearOutputMerged wsDst, "M", 11, clearEndM
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
     outRow = 11
 
     ' 【重要な修正】F5の値を復元
@@ -173,6 +176,9 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Next addr
 
 CleanExit:
+    ' 【重要な修正】M22の集計用SUM関数を復元（念のため）
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+
     ' 【重要な修正】最後にもう一度F5の値を復元（念のため）
     If savedF5Value <> "" Then
         Set rngF5 = wsDst.Range("F5")
@@ -189,6 +195,9 @@ CleanExit:
     Exit Sub
 
 CleanFail:
+    If Not wsDst Is Nothing Then
+        RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+    End If
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
     Application.Calculation = prevCalc
@@ -508,7 +517,7 @@ Public Sub 用地明細_クリア()
     Dim formulaM22 As String
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
-    formulaM22 = wsDst.Range("M22").Formula
+    formulaM22 = GetFormulaMergedSafe(wsDst.Range("M22"))
 
     prevScreenUpdating = Application.ScreenUpdating
     prevEnableEvents = Application.EnableEvents
@@ -537,8 +546,8 @@ Public Sub 用地明細_クリア()
     Saved_J5_Value = ""
 
     '--- 出力部の最終行を算出（行挿入に対応） ---
-    ' M22にはSUM関数があるため、M列は最終行判定から除外して集計行を保護する。
-    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", _
+    ' M22のSUM関数は保存・復元で保護し、M列の明細残骸も従来どおり最終行までクリアする。
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", _
                                             "S", "T", "U", "V", "W", "X", _
                                             "Z", "AA", "AB", "AC", "AD", "AE", _
                                             "AF", "AG", "AH", "AI", "AJ", "AK"), 11, 20)
@@ -551,8 +560,8 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "G", 11, lastRow
     ClearOutputMerged wsDst, "I", 11, lastRow
     ClearOutputMerged wsDst, "K", 11, lastRow
-    ' M22は集計用SUM関数のため、M列だけは明細範囲（M11～M21）に限定してクリアする。
-    ClearOutputMerged wsDst, "M", 11, 21
+    ClearOutputMerged wsDst, "M", 11, lastRow
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
     ClearOutputMerged wsDst, "S", 11, lastRow
     ClearOutputMerged wsDst, "T", 11, lastRow
     ClearOutputMerged wsDst, "U", 11, lastRow
@@ -573,7 +582,7 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "AK", 11, lastRow
 
     '--- 集計用SUM関数を保護 ---
-    wsDst.Range("M22").Formula = formulaM22
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
 
     '--- 任意：S1 を選択 ---
     wsDst.Range("S1").Select
@@ -587,7 +596,7 @@ CleanExit:
 
 CleanFail:
     If Not wsDst Is Nothing Then
-        wsDst.Range("M22").Formula = formulaM22
+        RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
     End If
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
@@ -851,6 +860,7 @@ Public Sub 用地一括転記_ワンクリック()
     Dim prevEnableEvents As Boolean
     Dim prevCalc As XlCalculation
     Dim wsDst As Worksheet
+    Dim formulaM22 As String
 
     prevScreenUpdating = Application.ScreenUpdating
     prevEnableEvents = Application.EnableEvents
@@ -862,6 +872,7 @@ Public Sub 用地一括転記_ワンクリック()
     Application.Calculation = xlCalculationManual
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    formulaM22 = GetFormulaMergedSafe(wsDst.Range("M22"))
 
     '--- ブロック記録を初期化 ---
     ResetBlockTracking
@@ -893,6 +904,9 @@ Public Sub 用地一括転記_ワンクリック()
         WriteToMergedTopLeft wsDst, "J", 5, Saved_J5_Value
     End If
 
+    '--- M22の集計用SUM関数を最終復元（念のため） ---
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+
 CleanExit:
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
@@ -900,6 +914,9 @@ CleanExit:
     Exit Sub
 
 CleanFail:
+    If Not wsDst Is Nothing Then
+        RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+    End If
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
     Application.Calculation = prevCalc
@@ -1382,6 +1399,28 @@ Private Sub ClearCellContentsMergedSafe(ByVal c As Range)
         c.MergeArea.ClearContents
     Else
         c.ClearContents
+    End If
+End Sub
+
+'==================== 結合対応：数式取得（MergeArea左上セル） ====================
+Private Function GetFormulaMergedSafe(ByVal c As Range) As String
+    If c Is Nothing Then Exit Function
+    If c.MergeCells Then
+        GetFormulaMergedSafe = CStr(c.MergeArea.Cells(1, 1).Formula)
+    Else
+        GetFormulaMergedSafe = CStr(c.Formula)
+    End If
+End Function
+
+'==================== 結合対応：数式復元（MergeArea左上セル） ====================
+Private Sub RestoreFormulaMergedSafe(ByVal c As Range, ByVal formulaText As String)
+    If c Is Nothing Then Exit Sub
+    If formulaText = "" Then Exit Sub
+
+    If c.MergeCells Then
+        c.MergeArea.Cells(1, 1).Formula = formulaText
+    Else
+        c.Formula = formulaText
     End If
 End Sub
 
