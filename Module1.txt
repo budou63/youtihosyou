@@ -64,6 +64,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Dim vGenkyo As String, vKobo As String, vJisoku As String, vTanka As String, vKaisyu As String
     Dim colGenkyo As Long, colKobo As Long, colJisoku As Long, colTanka As Long, colKaisyu As Long
     Dim h As Long
+    Dim formulaM22 As String
 
     prevScreenUpdating = Application.ScreenUpdating
     prevEnableEvents = Application.EnableEvents
@@ -75,6 +76,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Application.Calculation = xlCalculationManual
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    formulaM22 = GetFormulaMergedSafe(wsDst.Range("M22"))
 
     ' 【重要な修正】F5の値を保存してからクリア処理
     Dim rngF5 As Range
@@ -105,6 +107,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     ClearOutputMerged wsDst, "I", 11, clearEndI
     ClearOutputMerged wsDst, "K", 11, clearEndK
     ClearOutputMerged wsDst, "M", 11, clearEndM
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
     outRow = 11
 
     ' 【重要な修正】F5の値を復元
@@ -173,6 +176,9 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Next addr
 
 CleanExit:
+    ' 【重要な修正】M22の集計用SUM関数を復元（念のため）
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+
     ' 【重要な修正】最後にもう一度F5の値を復元（念のため）
     If savedF5Value <> "" Then
         Set rngF5 = wsDst.Range("F5")
@@ -189,6 +195,9 @@ CleanExit:
     Exit Sub
 
 CleanFail:
+    If Not wsDst Is Nothing Then
+        RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+    End If
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
     Application.Calculation = prevCalc
@@ -505,8 +514,10 @@ Public Sub 用地明細_クリア()
     Dim wsDst As Worksheet
     Dim prevScreenUpdating As Boolean, prevEnableEvents As Boolean, prevCalc As XlCalculation
     Dim lastRow As Long
+    Dim formulaM22 As String
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    formulaM22 = GetFormulaMergedSafe(wsDst.Range("M22"))
 
     prevScreenUpdating = Application.ScreenUpdating
     prevEnableEvents = Application.EnableEvents
@@ -535,7 +546,11 @@ Public Sub 用地明細_クリア()
     Saved_J5_Value = ""
 
     '--- 出力部の最終行を算出（行挿入に対応） ---
-    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", "S", "T", "U", "V"), 11, 20)
+    ' M22のSUM関数は保存・復元で保護し、M列の明細残骸も従来どおり最終行までクリアする。
+    lastRow = GetLastDataRow(wsDst, Array("B", "C", "D", "F", "G", "I", "K", "M", _
+                                            "S", "T", "U", "V", "W", "X", _
+                                            "Z", "AA", "AB", "AC", "AD", "AE", _
+                                            "AF", "AG", "AH", "AI", "AJ", "AK"), 11, 20)
 
     '--- 縦詰め出力をクリア ---
     ClearOutputMerged wsDst, "B", 11, lastRow
@@ -546,10 +561,28 @@ Public Sub 用地明細_クリア()
     ClearOutputMerged wsDst, "I", 11, lastRow
     ClearOutputMerged wsDst, "K", 11, lastRow
     ClearOutputMerged wsDst, "M", 11, lastRow
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
     ClearOutputMerged wsDst, "S", 11, lastRow
     ClearOutputMerged wsDst, "T", 11, lastRow
     ClearOutputMerged wsDst, "U", 11, lastRow
     ClearOutputMerged wsDst, "V", 11, lastRow
+    ClearOutputMerged wsDst, "W", 11, lastRow
+    ClearOutputMerged wsDst, "X", 11, lastRow
+    ClearOutputMerged wsDst, "Z", 11, lastRow
+    ClearOutputMerged wsDst, "AA", 11, lastRow
+    ClearOutputMerged wsDst, "AB", 11, lastRow
+    ClearOutputMerged wsDst, "AC", 11, lastRow
+    ClearOutputMerged wsDst, "AD", 11, lastRow
+    ClearOutputMerged wsDst, "AE", 11, lastRow
+    ClearOutputMerged wsDst, "AF", 11, lastRow
+    ClearOutputMerged wsDst, "AG", 11, lastRow
+    ClearOutputMerged wsDst, "AH", 11, lastRow
+    ClearOutputMerged wsDst, "AI", 11, lastRow
+    ClearOutputMerged wsDst, "AJ", 11, lastRow
+    ClearOutputMerged wsDst, "AK", 11, lastRow
+
+    '--- 集計用SUM関数を保護 ---
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
 
     '--- 任意：S1 を選択 ---
     wsDst.Range("S1").Select
@@ -562,6 +595,9 @@ CleanExit:
     Exit Sub
 
 CleanFail:
+    If Not wsDst Is Nothing Then
+        RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+    End If
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
     Application.Calculation = prevCalc
@@ -621,6 +657,11 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     Dim kouboIndex As Long
     Dim kouboHeaderMax As Long
     Dim kouboHasValue As Boolean
+    Dim ownerHeaderNames As Variant, ownerDestCols As Variant, clearCols As Variant
+    Dim colOwnerList() As Long
+    Dim ownerIndex As Long
+    Dim vOwner As String
+    Dim clearCol As Variant
     Dim baseName As Variant
     Dim h As Long
     Dim outStartRow As Long, outBaseEndRow As Long
@@ -639,21 +680,15 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
 
-    '--- ① 出力エリア（S11～Vの転記範囲）を毎回すべてクリア ---
-    Dim lastRowS As Long, lastRowT As Long, lastRowU As Long, lastRowV As Long, lastRowW As Long, lastRowX As Long, clearEnd As Long
-    lastRowS = wsDst.Cells(wsDst.rows.count, "S").End(xlUp).Row
-    lastRowT = wsDst.Cells(wsDst.rows.count, "T").End(xlUp).Row
-    lastRowU = wsDst.Cells(wsDst.rows.count, "U").End(xlUp).Row
-    lastRowV = wsDst.Cells(wsDst.rows.count, "V").End(xlUp).Row
-    lastRowW = wsDst.Cells(wsDst.rows.count, "W").End(xlUp).Row
-    lastRowX = wsDst.Cells(wsDst.rows.count, "X").End(xlUp).Row
-    clearEnd = WorksheetFunction.Max(outBaseEndRow, lastRowS, lastRowT, lastRowU, lastRowV, lastRowW, lastRowX)
-    ClearOutputMerged wsDst, "S", outStartRow, clearEnd
-    ClearOutputMerged wsDst, "T", outStartRow, clearEnd
-    ClearOutputMerged wsDst, "U", outStartRow, clearEnd
-    ClearOutputMerged wsDst, "V", outStartRow, clearEnd
-    ClearOutputMerged wsDst, "W", outStartRow, clearEnd ' ★FIX: W列も毎回クリア対象に追加
-    ClearOutputMerged wsDst, "X", outStartRow, clearEnd ' ★FIX: X列 公募地目を毎回クリア対象に追加
+    '--- ① 出力エリア（S～X列、Z～AK列の転記範囲）を毎回すべてクリア ---
+    Dim clearEnd As Long
+    clearCols = Array("S", "T", "U", "V", "W", "X", _
+                      "Z", "AA", "AB", "AC", "AD", "AE", _
+                      "AF", "AG", "AH", "AI", "AJ", "AK")
+    clearEnd = GetLastDataRow(wsDst, clearCols, outStartRow, outBaseEndRow)
+    For Each clearCol In clearCols
+        ClearOutputMerged wsDst, CStr(clearCol), outStartRow, clearEnd
+    Next clearCol
 
     '--- ② 参照元シートの準備 ---
     Set wbSrc = GetOrOpenSourceWorkbook(SRC_FILE_EXACT, SRC_FILE_PATTERN)
@@ -671,6 +706,19 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
     colShunko = FindHeaderCol(wsSrc, "竣工年月日", HEADER_ROW)
     colRegInfo = FindHeaderCol(wsSrc, "登記事項", HEADER_ROW)
     colKifu = FindHeaderCol(wsSrc, "寄附等理由事業", HEADER_ROW) ' ★FIX: W列用見出しを追加
+
+    '--- Z～AK列：土地所有者・相続人情報（ブロック先頭行のみ転記） ---
+    ownerHeaderNames = Array("土地所有者住所", "土地所有者", _
+                             "相続人住所①", "相続人①", _
+                             "相続人住所②", "相続人②", _
+                             "相続人住所③", "相続人③", _
+                             "相続人住所④", "相続人④", _
+                             "相続人住所⑤", "相続人⑤")
+    ownerDestCols = Array("Z", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK")
+    ReDim colOwnerList(LBound(ownerHeaderNames) To UBound(ownerHeaderNames))
+    For ownerIndex = LBound(ownerHeaderNames) To UBound(ownerHeaderNames)
+        colOwnerList(ownerIndex) = FindHeaderCol(wsSrc, CStr(ownerHeaderNames(ownerIndex)), HEADER_ROW)
+    Next ownerIndex
 
     ' ★FIX: X列 公募地目（①～⑳の連番見出しに対応）
     kouboHeaderMax = 20
@@ -733,7 +781,18 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                         End If
                     Next kouboIndex
 
-                    '--- ⑤ 出力ブロック範囲にS～Vを同一値で繰り返し転記 ---
+                    '--- Z～AK列はブロック先頭行（blockStart）にだけ1回転記 ---
+                    For ownerIndex = LBound(ownerHeaderNames) To UBound(ownerHeaderNames)
+                        vOwner = ""
+                        If colOwnerList(ownerIndex) > 0 Then
+                            vOwner = CleanText(CStr(wsSrc.Cells(foundRow, colOwnerList(ownerIndex)).Value))
+                        End If
+                        If vOwner <> "" Then
+                            WriteToMergedTopLeft wsDst, CStr(ownerDestCols(ownerIndex)), blockStart, vOwner
+                        End If
+                    Next ownerIndex
+
+                    '--- ⑤ 出力ブロック範囲にS～Xを同一値で繰り返し転記 ---
                     If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "" Or vKifu <> "" Or kouboHasValue) Then ' ★FIX: X列 公募地目を判定に追加
                         currentRow = blockStart
                         kouboIndex = 1
@@ -801,6 +860,7 @@ Public Sub 用地一括転記_ワンクリック()
     Dim prevEnableEvents As Boolean
     Dim prevCalc As XlCalculation
     Dim wsDst As Worksheet
+    Dim formulaM22 As String
 
     prevScreenUpdating = Application.ScreenUpdating
     prevEnableEvents = Application.EnableEvents
@@ -812,6 +872,7 @@ Public Sub 用地一括転記_ワンクリック()
     Application.Calculation = xlCalculationManual
 
     Set wsDst = ThisWorkbook.Worksheets(DST_SHEET)
+    formulaM22 = GetFormulaMergedSafe(wsDst.Range("M22"))
 
     '--- ブロック記録を初期化 ---
     ResetBlockTracking
@@ -843,6 +904,9 @@ Public Sub 用地一括転記_ワンクリック()
         WriteToMergedTopLeft wsDst, "J", 5, Saved_J5_Value
     End If
 
+    '--- M22の集計用SUM関数を最終復元（念のため） ---
+    RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+
 CleanExit:
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
@@ -850,6 +914,9 @@ CleanExit:
     Exit Sub
 
 CleanFail:
+    If Not wsDst Is Nothing Then
+        RestoreFormulaMergedSafe wsDst.Range("M22"), formulaM22
+    End If
     Application.ScreenUpdating = prevScreenUpdating
     Application.EnableEvents = prevEnableEvents
     Application.Calculation = prevCalc
@@ -1332,6 +1399,28 @@ Private Sub ClearCellContentsMergedSafe(ByVal c As Range)
         c.MergeArea.ClearContents
     Else
         c.ClearContents
+    End If
+End Sub
+
+'==================== 結合対応：数式取得（MergeArea左上セル） ====================
+Private Function GetFormulaMergedSafe(ByVal c As Range) As String
+    If c Is Nothing Then Exit Function
+    If c.MergeCells Then
+        GetFormulaMergedSafe = CStr(c.MergeArea.Cells(1, 1).Formula)
+    Else
+        GetFormulaMergedSafe = CStr(c.Formula)
+    End If
+End Function
+
+'==================== 結合対応：数式復元（MergeArea左上セル） ====================
+Private Sub RestoreFormulaMergedSafe(ByVal c As Range, ByVal formulaText As String)
+    If c Is Nothing Then Exit Sub
+    If formulaText = "" Then Exit Sub
+
+    If c.MergeCells Then
+        c.MergeArea.Cells(1, 1).Formula = formulaText
+    Else
+        c.Formula = formulaText
     End If
 End Sub
 
