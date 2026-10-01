@@ -13,7 +13,7 @@ Private Const SRC_FILE_PATTERN As String = "*工事*補助金改*.xlsm"  ' な�
 Private Const DST_SHEET As String = "用地明細"
 Private Const TRIG_ADDRS As String = "S1,T1,U1"  ' トリガー入力セル（S→T→U）
 Private Const REG_INFO_CELL As String = "J5"  ' B5=件名/F5=住所/M5=施工業者の並びに合わせ、同じ5行目の空き領域を登記事項用に確保
-Private Const DEBUG_LOG As Boolean = False  ' ★FIX: X列 公募地目（必要時のみ True）
+Private Const DEBUG_LOG As Boolean = False  ' ★FIX: X列 公簿地目（必要時のみ True）
 
 '==================== ブロック境界記録（B～Mの実出力結果に基づく） ====================
 ' 各トリガーの「実際に書き込んだ行」を Range として記録し、
@@ -49,8 +49,8 @@ Public Sub 字縦詰め転記_TUV_C()
 End Sub
 
 '======================================================================
-' ③ 用地項目：筆①～⑩を同一行に揃えて出す（F/G/I/K/M ）
-'     F:現況地目  G:公募地積  I:実測地積(実測地籍も吸収)  K:単価  M:買収金額
+' ③ 用地項目：筆①～⑳を同一行に揃えて出す（F/G/I/K/M ）
+'     F:現況地目  G:公簿地積  I:実測地積(実測地籍も吸収)  K:単価  M:買収金額
 '======================================================================
 Public Sub 用地項目縦詰め転記_TUV_FGIKM()
 
@@ -63,6 +63,7 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     Dim suffixes As Variant, i As Long
     Dim vGenkyo As String, vKobo As String, vJisoku As String, vTanka As String, vKaisyu As String
     Dim colGenkyo As Long, colKobo As Long, colJisoku As Long, colTanka As Long, colKaisyu As Long
+    Dim colKoboTotal As Long
     Dim h As Long
     Dim formulaM22 As String
 
@@ -128,32 +129,37 @@ Public Sub 用地項目縦詰め転記_TUV_FGIKM()
     lastSrcRow = wsSrc.Cells(wsSrc.rows.count, colTransfer).End(xlUp).Row
     If lastSrcRow < DATA_START_ROW Then GoTo CleanExit
 
-    suffixes = Array("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
+    ' 現在の「表」シートは各筆①～⑳を持つ。
+    suffixes = Array("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", _
+                     "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳")
+    colKoboTotal = RequireHeaderCol(wsSrc, "公簿地目合計", HEADER_ROW)
 
     trigCells = Split(TRIG_ADDRS, ",")
     For Each addr In trigCells
         key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
             foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
-            ' Debug.Print "key=", key, "foundRow=", foundRow ' ★FIX: X列 公募地目（必要なら有効化）
+            ' Debug.Print "key=", key, "foundRow=", foundRow ' ★FIX: X列 公簿地目（必要なら有効化）
             If foundRow > 0 Then
 
                 For i = LBound(suffixes) To UBound(suffixes)
 
-                    colGenkyo = FindHeaderCol(wsSrc, "現況地目" & CStr(suffixes(i)), HEADER_ROW)
-                    colKobo = FindHeaderCol(wsSrc, "公募地積" & CStr(suffixes(i)), HEADER_ROW)
+                    colGenkyo = RequireHeaderCol(wsSrc, "現況地目" & CStr(suffixes(i)), HEADER_ROW)
+                    colKobo = RequireHeaderCol(wsSrc, "公簿地積" & CStr(suffixes(i)), HEADER_ROW)
 
                     colJisoku = FindHeaderCol(wsSrc, "実測地積" & CStr(suffixes(i)), HEADER_ROW)
                     If colJisoku = 0 Then colJisoku = FindHeaderCol(wsSrc, "実測地籍" & CStr(suffixes(i)), HEADER_ROW)
+                    If colJisoku = 0 Then Err.Raise vbObjectError + 321, , _
+                        "転記元見出し『実測地積" & CStr(suffixes(i)) & "』が" & wsSrc.name & "シートに見つかりません。"
 
-                    colTanka = FindHeaderCol(wsSrc, "単価" & CStr(suffixes(i)), HEADER_ROW)
-                    colKaisyu = FindHeaderCol(wsSrc, "買収金額" & CStr(suffixes(i)), HEADER_ROW)
+                    colTanka = RequireHeaderCol(wsSrc, "単価" & CStr(suffixes(i)), HEADER_ROW)
+                    colKaisyu = RequireHeaderCol(wsSrc, "買収金額" & CStr(suffixes(i)), HEADER_ROW)
 
-                    vGenkyo = IIf(colGenkyo > 0, CleanText(CStr(wsSrc.Cells(foundRow, colGenkyo).Value)), "")
-                    vKobo = IIf(colKobo > 0, CleanText(CStr(wsSrc.Cells(foundRow, colKobo).Value)), "")
-                    vJisoku = IIf(colJisoku > 0, CleanText(CStr(wsSrc.Cells(foundRow, colJisoku).Value)), "")
-                    vTanka = IIf(colTanka > 0, CleanText(CStr(wsSrc.Cells(foundRow, colTanka).Value)), "")
-                    vKaisyu = IIf(colKaisyu > 0, CleanText(CStr(wsSrc.Cells(foundRow, colKaisyu).Value)), "")
+                    vGenkyo = CleanText(CStr(wsSrc.Cells(foundRow, colGenkyo).Value))
+                    vKobo = CleanText(CStr(wsSrc.Cells(foundRow, colKobo).Value))
+                    vJisoku = CleanText(CStr(wsSrc.Cells(foundRow, colJisoku).Value))
+                    vTanka = CleanText(CStr(wsSrc.Cells(foundRow, colTanka).Value))
+                    vKaisyu = CleanText(CStr(wsSrc.Cells(foundRow, colKaisyu).Value))
 
                     If (vGenkyo & vKobo & vJisoku & vTanka & vKaisyu) <> "" Then
 
@@ -720,22 +726,15 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
         colOwnerList(ownerIndex) = FindHeaderCol(wsSrc, CStr(ownerHeaderNames(ownerIndex)), HEADER_ROW)
     Next ownerIndex
 
-    ' ★FIX: X列 公募地目（①～⑳の連番見出しに対応）
+    ' ★FIX: X列 公簿地目（①～⑳の連番見出しに対応）
     kouboHeaderMax = 20
     ReDim colKouboChimokuList(1 To kouboHeaderMax)
     For kouboIndex = 1 To kouboHeaderMax
         colKouboChimokuList(kouboIndex) = 0
-        For Each baseName In Array("公募地目", "公簿地目")
-            colKouboChimokuList(kouboIndex) = FindHeaderCol(wsSrc, CStr(baseName) & CircleNumber(kouboIndex), HEADER_ROW)
-            If colKouboChimokuList(kouboIndex) = 0 Then
-                colKouboChimokuList(kouboIndex) = FindHeaderCol(wsSrc, CStr(baseName) & CStr(kouboIndex), HEADER_ROW)
-            End If
-            If colKouboChimokuList(kouboIndex) = 0 Then
-                colKouboChimokuList(kouboIndex) = FindHeaderCol(wsSrc, CStr(baseName) & ToFullWidthNumber(kouboIndex), HEADER_ROW)
-            End If
-            If colKouboChimokuList(kouboIndex) > 0 Then Exit For
-        Next baseName
-        If DEBUG_LOG Then Debug.Print "kouboIndex=", kouboIndex, "col=", colKouboChimokuList(kouboIndex) ' ★FIX: X列 公募地目
+        baseName = "公簿地目"
+        colKouboChimokuList(kouboIndex) = RequireHeaderCol( _
+            wsSrc, CStr(baseName) & CircleNumber(kouboIndex), HEADER_ROW)
+        If DEBUG_LOG Then Debug.Print "kouboIndex=", kouboIndex, "col=", colKouboChimokuList(kouboIndex) ' ★FIX: X列 公簿地目
     Next kouboIndex
 
     '--- ③ トリガーセルを順に処理し、B～Mの実出力ブロックに同期 ---
@@ -745,7 +744,7 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
         key = NormalizeKey(wsDst.Range(CStr(addr)).Value)
         If key <> "" Then
             foundRow = FindRowByKey(wsSrc, colTransfer, key, DATA_START_ROW, lastSrcRow)
-            If DEBUG_LOG Then Debug.Print "key=", key, "foundRow=", foundRow ' ★FIX: X列 公募地目
+            If DEBUG_LOG Then Debug.Print "key=", key, "foundRow=", foundRow ' ★FIX: X列 公簿地目
             If foundRow > 0 Then
                 If GetBlockRangeByKey(wsDst, key, blockStart, blockEnd) Then
                     '--- ④ 該当データを取得（単一値） ---
@@ -793,12 +792,12 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                     Next ownerIndex
 
                     '--- ⑤ 出力ブロック範囲にS～Xを同一値で繰り返し転記 ---
-                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "" Or vKifu <> "" Or kouboHasValue) Then ' ★FIX: X列 公募地目を判定に追加
+                    If (vKeiyaku <> "" Or vMoushutsu <> "" Or vShunko <> "" Or vRegInfo <> "" Or vKifu <> "" Or kouboHasValue) Then ' ★FIX: X列 公簿地目を判定に追加
                         currentRow = blockStart
                         kouboIndex = 1
-                        If DEBUG_LOG Then Debug.Print "blockStart=", blockStart, "blockEnd=", blockEnd ' ★FIX: X列 公募地目
+                        If DEBUG_LOG Then Debug.Print "blockStart=", blockStart, "blockEnd=", blockEnd ' ★FIX: X列 公簿地目
                         Do While currentRow < blockEnd
-                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V", "W", "X") ' ★FIX: X列 公募地目を対象に追加
+                            EnsureWritableRowMulti wsDst, currentRow, outBaseEndRow, Array("S", "T", "U", "V", "W", "X") ' ★FIX: X列 公簿地目を対象に追加
 
                             If vKeiyaku <> "" Then
                                 WriteToMergedTopLeft wsDst, "S", currentRow, vKeiyaku
@@ -823,11 +822,11 @@ Public Sub Transfer_STU_Vertical_Reconstruct()
                                 End If
                             End If
                             If vKouboChimoku <> "" Then
-                                WriteToMergedTopLeft wsDst, "X", currentRow, vKouboChimoku ' ★FIX: X列 公募地目へ転記
+                                WriteToMergedTopLeft wsDst, "X", currentRow, vKouboChimoku ' ★FIX: X列 公簿地目へ転記
                             End If
-                            If DEBUG_LOG Then Debug.Print "kouboIndex=", kouboIndex, "col=", IIf(kouboIndex <= kouboHeaderMax, colKouboChimokuList(kouboIndex), 0), "value=", vKouboChimoku, "row=", currentRow ' ★FIX: X列 公募地目
+                            If DEBUG_LOG Then Debug.Print "kouboIndex=", kouboIndex, "col=", IIf(kouboIndex <= kouboHeaderMax, colKouboChimokuList(kouboIndex), 0), "value=", vKouboChimoku, "row=", currentRow ' ★FIX: X列 公簿地目
 
-                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V", "W", "X")) ' ★FIX: X列 公募地目を高さ判定に追加
+                            h = GetMergedHeightMulti(wsDst, currentRow, Array("S", "T", "U", "V", "W", "X")) ' ★FIX: X列 公簿地目を高さ判定に追加
                             currentRow = currentRow + h
                             kouboIndex = kouboIndex + 1
                         Loop
@@ -1321,6 +1320,15 @@ Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String
         End If
     Next c
     FindHeaderCol = 0
+End Function
+
+'==================== 必須見出し名→列番号（未検出時はセル参照前に明示エラー） ====================
+Private Function RequireHeaderCol(ByVal ws As Worksheet, ByVal headerName As String, ByVal headerRow As Long) As Long
+    RequireHeaderCol = FindHeaderCol(ws, headerName, headerRow)
+    If RequireHeaderCol = 0 Then
+        Err.Raise vbObjectError + 320, "RequireHeaderCol", _
+                  "転記元見出し『" & headerName & "』が" & ws.name & "シートに見つかりません。"
+    End If
 End Function
 
 '==================== キー一致行を検索（完全一致） ====================
